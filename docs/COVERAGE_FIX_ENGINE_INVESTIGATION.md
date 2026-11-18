@@ -155,3 +155,22 @@ The Vulkan triangle emission helper computes a signed triangle area and classifi
 This is an important distinction: the renderer has a custom top-left ownership convention for internal triangle edges, but polygon perimeter edges are deliberately excluded from that ownership-bit assignment. The flags are packed into each emitted `TriangleGpu`. The actual pixel inclusion test that consumes these flags still needs to be traced before deciding whether this is correct or a source of edge cracks.
 
 The current evidence narrows the next investigation to the consumer of `TriangleGpu::flags` and the raster coverage equations. In particular, verify the sign convention, pixel sample location, epsilon use, and treatment of boundary edges at y = targetHeight - 1. Do not alter the ownership flags until their consumer is understood. No renderer code was changed.
+
+
+## Follow-up: Vulkan raster ownership and lower-edge scissor audit
+
+The actual graphics raster pipeline uses Vulkan triangle-list rasterization with fill mode, no face culling, and single-sample rasterization (`VK_SAMPLE_COUNT_1_BIT`). It does not implement a custom software edge-function pixel test in the inspected graphics path. Pixel coverage of emitted triangles is therefore ultimately governed by Vulkan's fixed-function triangle rasterization rules.
+
+The CPU-side `kTriangleFlagTopLeftEdge0/1/2` metadata is written into the per-triangle flags, but the inspected raster vertex/fragment shader source defines and consumes texture/depth-related flags only; it contains no top-left-edge flag constants or custom edge inclusion/discard test. Consequently the CPU top-left metadata is not currently evidence of a custom shader-side pixel ownership rule. Do not modify those bits as a proposed seam fix without locating another consumer.
+
+The Vulkan viewport is configured with origin (0,0), positive width and height equal to the render target dimensions. The per-draw scissor derives its Y interval from emitted triangle bounds, adds padding of at least two pixels (or the effective raster scale), and clamps the exclusive bottom coordinate to `ColorImageHeight`. This does not reveal an obvious one-row omission at the lower edge: the scissor can include the final row, and the padding is clipped only at the attachment boundary.
+
+The triangle Y bounds are computed as floor(clamped minimum Y) and ceil(clamped maximum Y), with the bottom represented as an exclusive coordinate. This is consistent with a half-open scissor interval in principle. The remaining risk is not a proven off-by-one in this code, but a mismatch between the coordinate convention used when projected vertices are generated and Vulkan's pixel-center/fixed-function coverage convention, or an earlier loss of coverage when the frontend disables the fix for a polygon crossing the viewport.
+
+Updated investigation direction:
+1. Trace the exact screen-space coordinate generation and any half-pixel / fixed-point conversion before the Vulkan vertex buffer.
+2. Inspect all paths that choose the graphics viewport/scissor, including final and auxiliary passes, to rule out a different lower-edge rectangle.
+3. Compare polygons ending exactly at Y = targetHeight, just below it, and just above it using a deterministic off-device coverage test if the scene builder can be isolated.
+4. Keep the lower-edge viewport-guard counters as the first on-device correlation test. Do not change Vulkan fill rules, scissor padding, or depth bias speculatively.
+
+No renderer behavior was changed in this follow-up.
