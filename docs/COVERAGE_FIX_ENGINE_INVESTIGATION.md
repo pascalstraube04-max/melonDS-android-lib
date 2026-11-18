@@ -274,3 +274,6 @@ These are hand-checkable expectations for the new convex offset, not substitutes
 - At 6x, exact bottom-boundary Y=18432 is admitted by the guard and expansion output clamps to 18431; Y=18433 remains strict overflow and disables the fix for that polygon.
 
 These expectations have not been run against compiled C++ code.
+
+
+A further static-review correction (dc0620915686d32e3d987ed9e5e5ce58eeb0f4b7) makes degenerate-edge handling consistent: if any polygon edge has effectively zero length, or adjacent outward normals have no stable miter intersection, the entire polygon uses the radial fallback. This avoids mixing unexpanded source vertices with miter-expanded neighbors along one outline. This remains uncompiled and untested.
