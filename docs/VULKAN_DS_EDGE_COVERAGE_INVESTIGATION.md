@@ -85,3 +85,18 @@ A fragment-stage SSBO lookup is not the preferred first implementation. The exis
 4. Keep the correction gated by the existing coverage-fix flag so default rendering remains unchanged. Avoid any new fragment SSBO descriptor or per-fragment buffer lookup if the vertex-stage forwarding works.
 
 This path still needs careful handling of clipping, perspective interpolation, viewport scaling, and the DS scanline edge cases documented above. It is an implementation hypothesis, not yet a verified fix. Before editing shader interfaces, validate `gl_VertexIndex`, `pc.triangleBase`, triangle-buffer indexing, and all shader variants in the actual pipeline.
+
+
+## Draw-index mapping verification (2026-11-18)
+
+The proposed vertex-stage SSBO lookup is not necessary for associating raster vertices with their triangle:
+
+- `appendTriangle()` pushes exactly one `TriangleGpu` and then appends exactly three corresponding `GraphicsVertexGpu` records in vertex order (0, 1, 2).
+- The raster draw uses `vkCmdDraw(mergedTriangleCount * 3u, 1u, firstDraw.firstTriangle * 3u, 0u)`. Thus the first vertex for triangle N is exactly vertex index `N * 3`, and each triangle's three emitted vertex records are contiguous.
+- Each emitted vertex already carries the same flat `triangle.flags`, including the three boundary-edge bits and coverage-fix bit.
+- Consequently, if original boundary-edge coordinates can be resolved reliably on the CPU, they can be copied into the three per-triangle `GraphicsVertexGpu` records and forwarded as flat vertex outputs. This avoids a triangle-SSBO lookup, descriptor changes, and fragment-stage storage-buffer access.
+- `TriangleGpu` and `GraphicsVertexGpu` are separate upload streams. The existing raster vertex attributes are sourced from `GraphicsVertices`; the triangle SSBO is not required to recover the triangle number for this draw.
+
+Remaining blocker: `appendTriangle()` receives positions from `SharedGraphicsScene.Vertices`, which have already passed through `resolveFixedCoords()` and can be coverage-expanded. The source `Polygon` pointer and its original `Vertices[]` are available during polygon emission, but a correct mapping must account for clipping, generated vertices, triangulation, and which emitted boundary segments still correspond to original DS edges. Do not simply copy the first three source vertices: that is incorrect for polygons with more than three vertices and for clipped polygons.
+
+Implementation direction revised: first trace the frontend's clipping and triangulation provenance so each emitted boundary edge can carry its true unexpanded endpoints. Then add compact per-triangle boundary endpoint attributes to `GraphicsVertexGpu` (or an equivalent CPU-side record), forward them flat, and implement the DS edge test. The vertex-to-triangle draw mapping itself is now confirmed; source-edge provenance remains unverified.
