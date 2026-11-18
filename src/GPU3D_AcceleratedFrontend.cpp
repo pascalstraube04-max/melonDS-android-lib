@@ -209,56 +209,98 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
     if (coverageFixPx <= 0.0f)
         return;
 
-    float centerX = 0.0f;
-    float centerY = 0.0f;
-    u32 vertexCount = 0;
-    std::array<float, 10> baseX{};
-    std::array<float, 10> baseY{};
+    std::array<double, 10> baseX{};
+    std::array<double, 10> baseY{};
+    if (polygon.NumVertices < 3u || polygon.NumVertices > baseX.size())
+        return;
 
     for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
     {
         const Vertex* vertex = polygon.Vertices[vertexIndex];
         if (vertex == nullptr)
-            continue;
+            return;
 
         const s32 xFixed = ResolveAcceleratedVertexFixedX(*vertex, scale, useHiresCoordinates);
         const s32 yFixed = ResolveAcceleratedVertexFixedY(*vertex, scale, useHiresCoordinates);
-        baseX[vertexIndex] = static_cast<float>(xFixed) * (1.0f / 16.0f);
-        baseY[vertexIndex] = static_cast<float>(yFixed) * (1.0f / 16.0f);
-        centerX += baseX[vertexIndex];
-        centerY += baseY[vertexIndex];
-        vertexCount++;
+        baseX[vertexIndex] = static_cast<double>(xFixed) * (1.0 / 16.0);
+        baseY[vertexIndex] = static_cast<double>(yFixed) * (1.0 / 16.0);
     }
 
-    if (vertexCount == 0u)
+    // DS polygons remain convex after homogeneous clipping. Offset each edge
+    // along its outward normal and intersect adjacent offset lines at corners.
+    // A bounded miter avoids unbounded spikes for nearly collinear vertices.
+    double signedAreaTwice = 0.0;
+    for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
+    {
+        const u32 nextIndex = (vertexIndex + 1u) % polygon.NumVertices;
+        signedAreaTwice += baseX[vertexIndex] * baseY[nextIndex]
+            - baseX[nextIndex] * baseY[vertexIndex];
+    }
+
+    if (std::abs(signedAreaTwice) < 0.000001)
         return;
 
-    centerX /= static_cast<float>(vertexCount);
-    centerY /= static_cast<float>(vertexCount);
+    const double orientation = signedAreaTwice > 0.0 ? 1.0 : -1.0;
+    const double maxMiterLength = static_cast<double>(coverageFixPx) * 4.0;
 
     for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
     {
-        if (polygon.Vertices[vertexIndex] == nullptr)
-            continue;
+        const u32 previousIndex = (vertexIndex + polygon.NumVertices - 1u) % polygon.NumVertices;
+        const u32 nextIndex = (vertexIndex + 1u) % polygon.NumVertices;
 
-        const float dx = baseX[vertexIndex] - centerX;
-        const float dy = baseY[vertexIndex] - centerY;
-        float outPosX = baseX[vertexIndex];
-        float outPosY = baseY[vertexIndex];
-        const float lengthSquared = (dx * dx) + (dy * dy);
-        if (lengthSquared > 0.000001f)
+        const double previousDx = baseX[vertexIndex] - baseX[previousIndex];
+        const double previousDy = baseY[vertexIndex] - baseY[previousIndex];
+        const double nextDx = baseX[nextIndex] - baseX[vertexIndex];
+        const double nextDy = baseY[nextIndex] - baseY[vertexIndex];
+        const double previousLength = std::hypot(previousDx, previousDy);
+        const double nextLength = std::hypot(nextDx, nextDy);
+
+        if (previousLength < 0.000001 || nextLength < 0.000001)
         {
-            const float inverseLength = 1.0f / std::sqrt(lengthSquared);
-            outPosX += dx * inverseLength * coverageFixPx;
-            outPosY += dy * inverseLength * coverageFixPx;
+            outX[vertexIndex] = static_cast<u32>(std::clamp(
+                static_cast<s32>(std::lround(baseX[vertexIndex] * 16.0)),
+                0, std::max(maxFixedX, 0)));
+            outY[vertexIndex] = static_cast<u32>(std::clamp(
+                static_cast<s32>(std::lround(baseY[vertexIndex] * 16.0)),
+                0, std::max(maxFixedY, 0)));
+            continue;
         }
 
+        // For positive winding, the outward normal is the right-hand normal.
+        const double previousNx = orientation * previousDy / previousLength;
+        const double previousNy = -orientation * previousDx / previousLength;
+        const double nextNx = orientation * nextDy / nextLength;
+        const double nextNy = -orientation * nextDx / nextLength;
+
+        double miterX = previousNx + nextNx;
+        double miterY = previousNy + nextNy;
+        const double miterLength = std::hypot(miterX, miterY);
+        double offsetX = nextNx * coverageFixPx;
+        double offsetY = nextNy * coverageFixPx;
+
+        if (miterLength > 0.000001)
+        {
+            miterX /= miterLength;
+            miterY /= miterLength;
+            const double denominator = miterX * nextNx + miterY * nextNy;
+            if (denominator > 0.0001)
+            {
+                const double miterDistance = std::min(
+                    static_cast<double>(coverageFixPx) / denominator,
+                    maxMiterLength);
+                offsetX = miterX * miterDistance;
+                offsetY = miterY * miterDistance;
+            }
+        }
+
+        const double outPosX = baseX[vertexIndex] + offsetX;
+        const double outPosY = baseY[vertexIndex] + offsetY;
         const s32 xFixed = std::clamp(
-            static_cast<s32>(std::lround(outPosX * 16.0f)),
+            static_cast<s32>(std::lround(outPosX * 16.0)),
             0,
             std::max(maxFixedX, 0));
         const s32 yFixed = std::clamp(
-            static_cast<s32>(std::lround(outPosY * 16.0f)),
+            static_cast<s32>(std::lround(outPosY * 16.0)),
             0,
             std::max(maxFixedY, 0));
         outX[vertexIndex] = static_cast<u32>(xFixed);
