@@ -81,6 +81,7 @@ layout(location = 8) flat in vec2 fOriginalEdge2;
 layout(location = 9) flat in uint fOriginalEdgeFlags;
 layout(location = 10) flat in vec4 fRasterTriangle01;
 layout(location = 11) flat in vec2 fRasterTriangle2;
+layout(location = 12) flat in uint fOriginalYBottom;
 
 layout(location = 0) out vec4 oColor;
 #if MELONDS_COLOR_ONLY == 0
@@ -424,7 +425,7 @@ float edgeCross(vec2 a, vec2 b, vec2 p)
     return edge.x * rel.y - edge.y * rel.x;
 }
 
-bool shouldFillDsBoundaryEdge(vec2 a, vec2 b, float interiorSide)
+bool shouldFillDsBoundaryEdge(vec2 a, vec2 b, float interiorSide, vec2 samplePoint)
 {
     // The DS software renderer fills both polygon edges for edge marking /
     // antialiasing and for translucent polygons when 3D alpha blending is on.
@@ -447,9 +448,17 @@ bool shouldFillDsBoundaryEdge(vec2 a, vec2 b, float interiorSide)
     bool rightEdge = delta.y * interiorSide > 0.0;
     bool verticalEdge = dx < 0.00001;
 
+    float renderScaleY = max(float(pc.height) * (1.0 / 192.0), 1.0);
+    uint nativeSampleY = uint(max(floor(samplePoint.y / renderScaleY), 0.0));
+    bool bottomRow = fOriginalYBottom > 0u && nativeSampleY == (fOriginalYBottom - 1u);
+    bool bottomFlatEdgeException = bottomRow
+        && xMajor
+        && (fOriginalEdgeFlags & 8u) != 0u;
+    if (bottomFlatEdgeException)
+        return true;
+
     // Mirrors the ordinary opaque left/right edge-fill cases in GPU3D_Soft.
-    // The special bottom-row and coincident-edge exceptions are handled in
-    // a later refinement once polygon-wide scanline metadata is carried here.
+    // The equal-slope, fully-overlapping edge exception remains to be added.
     if (rightEdge)
         return (!negative && xMajor) || verticalEdge;
     return negative || !xMajor;
@@ -512,7 +521,7 @@ void applyDsBoundaryCoverage()
             discard;
         if (abs(orientedSample) <= 0.0001)
         {
-            if (!shouldFillDsBoundaryEdge(a, b, interiorSide))
+            if (!shouldFillDsBoundaryEdge(a, b, interiorSide, samplePoint))
                 discard;
         }
     }
