@@ -163,3 +163,10 @@ Next implementation sequence:
 2. Verify that metadata against clipped and non-clipped polygons, including null entries and BetterPolygons center.
 3. Establish a reproducible GLSL-to-SPIR-V regeneration command (tool version, defines, optimization flags, entry point) matching the existing embedded header format.
 4. Only then add the vertex SSBO read/flat varyings and fragment boundary coverage test, regenerate every affected embedded variant, and run CI/build/device tests.
+
+
+## Android integration correction (2026-11-18)
+
+The shader regeneration tooling is not in this engine submodule, but it is present in the Android parent repository at `scripts/regenerate_vulkan_spirv.sh`. The Android Gradle task `:app:regenerateVulkanSpirv` invokes it, and `app/CMakeLists.txt` also wires shader-header regeneration before building the native core. The script uses NDK `glslc` when available, falls back to `glslangValidator`, emits the embedded `xxd -i` headers, and supports `--check`. It conditionally runs `spirv-opt -O --preserve-spec-constants` for selected fragment variants.
+
+The Android fork's existing Actions workflow was failing before compilation because `android-actions/setup-android@v3` defaulted to installing the removed SDK package `tools`. Its build step also referenced a nonexistent `setup-ndk` step output. A dedicated CI branch now pins the engine submodule to this investigation branch and updates the workflow to install `platform-tools` plus NDK `28.0.13004108`; the resulting Actions run is the first real build validation for these changes. The workflow must still be observed to completion before claiming success.
