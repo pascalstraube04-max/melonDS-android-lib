@@ -320,8 +320,8 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         const double previousDy = baseY[vertexIndex] - baseY[previousIndex];
         const double nextDx = baseX[nextIndex] - baseX[vertexIndex];
         const double nextDy = baseY[nextIndex] - baseY[vertexIndex];
-        const double previousLength = std::hypot(previousDx, previousDy);
-        const double nextLength = std::hypot(nextDx, nextDy);
+        const double previousLength = std::sqrt(previousDx * previousDx + previousDy * previousDy);
+        const double nextLength = std::sqrt(nextDx * nextDx + nextDy * nextDy);
 
         if (previousLength < 0.000001 || nextLength < 0.000001)
         {
@@ -340,24 +340,30 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         const double nextNx = orientation * nextDy / nextLength;
         const double nextNy = -orientation * nextDx / nextLength;
 
-        double miterX = previousNx + nextNx;
-        double miterY = previousNy + nextNy;
-        const double miterLength = std::hypot(miterX, miterY);
+        const double miterX = previousNx + nextNx;
+        const double miterY = previousNy + nextNy;
+        const double denominator = 1.0 + previousNx * nextNx + previousNy * nextNy;
         double offsetX = nextNx * coverageFixPx;
         double offsetY = nextNy * coverageFixPx;
 
-        if (miterLength > 0.000001)
+        if (denominator > 0.125)
         {
-            miterX /= miterLength;
-            miterY /= miterLength;
-            const double denominator = miterX * nextNx + miterY * nextNy;
-            if (denominator > 0.0001)
+            // Algebraically equivalent to the normalized miter intersection,
+            // without an additional square root for ordinary corners.
+            const double miterScale = static_cast<double>(coverageFixPx) / denominator;
+            offsetX = miterX * miterScale;
+            offsetY = miterY * miterScale;
+        }
+        else if (denominator > 0.0001)
+        {
+            // Only acute corners need the extra normalization to enforce the
+            // four-pixel-distance miter cap.
+            const double miterLength = std::sqrt(miterX * miterX + miterY * miterY);
+            if (miterLength > 0.000001)
             {
-                const double miterDistance = std::min(
-                    static_cast<double>(coverageFixPx) / denominator,
-                    maxMiterLength);
-                offsetX = miterX * miterDistance;
-                offsetY = miterY * miterDistance;
+                const double cappedScale = maxMiterLength / miterLength;
+                offsetX = miterX * cappedScale;
+                offsetY = miterY * cappedScale;
             }
         }
 
