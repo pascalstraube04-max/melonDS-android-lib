@@ -238,7 +238,20 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
     }
 
     if (std::abs(signedAreaTwice) < 0.000001)
+    {
+        // Preserve the source polygon if its winding/area is numerically
+        // degenerate; zero-filled output coordinates would collapse it.
+        for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
+        {
+            outX[vertexIndex] = static_cast<u32>(std::clamp(
+                static_cast<s32>(std::lround(baseX[vertexIndex] * 16.0)),
+                0, std::max(maxFixedX, 0)));
+            outY[vertexIndex] = static_cast<u32>(std::clamp(
+                static_cast<s32>(std::lround(baseY[vertexIndex] * 16.0)),
+                0, std::max(maxFixedY, 0)));
+        }
         return;
+    }
 
     const double orientation = signedAreaTwice > 0.0 ? 1.0 : -1.0;
     const double maxMiterLength = static_cast<double>(coverageFixPx) * 4.0;
