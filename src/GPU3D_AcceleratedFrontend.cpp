@@ -849,6 +849,20 @@ void BuildAcceleratedScene(
                 static_cast<s16>(vertex->TexCoords[0]),
                 static_cast<s16>(vertex->TexCoords[1]),
                 vertexAttrBase);
+            // Preserve the post-clip DS viewport position independently of any
+            // coverage expansion applied to xFixed/yFixed above.
+            AcceleratedSceneVertex& sceneVertex = outScene.Vertices[sceneVertexIndex];
+            if (config.UseHiresCoordinates)
+            {
+                sceneVertex.OriginalXFixed = vertex->HiresPosition[0] * safeScale;
+                sceneVertex.OriginalYFixed = vertex->HiresPosition[1] * safeScale;
+            }
+            else
+            {
+                sceneVertex.OriginalXFixed = (vertex->FinalPosition[0] << 4) * safeScale;
+                sceneVertex.OriginalYFixed = (vertex->FinalPosition[1] << 4) * safeScale;
+            }
+            sceneVertex.HasOriginalScreenCoords = true;
             appendPolygonVertexIndex(sceneVertexIndex);
         }
 
