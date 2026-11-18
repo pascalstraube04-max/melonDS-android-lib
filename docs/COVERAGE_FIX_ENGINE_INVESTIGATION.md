@@ -320,3 +320,23 @@ The DS homogeneous clipper was re-opened at the implementation level rather than
 Engineering consequence: the convex miter path is a reasonable candidate for normal clipped convex polygons, but the clipper's documented W=0 uncertainty prevents claiming that every possible post-clip polygon is a well-formed convex contour. The current convexity / area / zero-edge checks provide fallback protection for several malformed shapes, but they are not a substitute for a deterministic test of zero-W and near-zero-W clipping.
 
 No code change was made: changing the DS clipper or its fixed-size buffering without reproducing a failure would broaden risk beyond the Vulkan coverage issue. Add W=0 and near-zero-W cases to the eventual geometry regression set. Static review only; no build, CI, or device test was run.
+
+
+### Vulkan raster and depth-pipeline audit
+
+Static inspection of the Vulkan graphics path confirms the following data flow:
+
+- The CPU scene builder converts the configured coverage depth-bias value with a factor of 16,777,215. The graphics triangle builder subtracts that value from each affected vertex Z, clamps at zero, and only does so when the polygon's user coverage fix is active. The adjustment is therefore applied before interpolation, not as a Vulkan fixed-function depth-bias state.
+- The raster vertex shader normalizes the incoming 24-bit-style Z value with 1/16,777,216, applies the DS depth-equal window offset where required, and places the normalized depth in clip-space Z multiplied by clip W. The fragment shader then selects linear or perspective depth according to its specialization and writes that value to `gl_FragDepth` in the fragment-depth variant.
+- Opaque pipeline creation selects `LESS` or `LESS_OR_EQUAL` according to the emulated depth-compare mode. Depth testing and writes are enabled on the relevant opaque pipelines; other specialized passes deliberately differ.
+- The selected depth/stencil attachment format is device-dependent: the renderer tries D24_UNORM_S8 first, then D32_SFLOAT_S8, then D16_UNORM_S8. The same nominal 24-bit DS depth therefore encounters different attachment quantization on devices that fall back to D32 or D16.
+- The graphics vertex structure is statically asserted to 64 bytes, and its C++ offsets match the Vulkan vertex attribute descriptions (position/W, UV, packed color, flags/metadata, and signed texture-coordinate bounds).
+
+Engineering implications:
+
+1. The user's depth-bias value changes the interpolated depth of the whole polygon, not just the expanded edge. This explains why increasing it can change overlap and depth-test outcomes beyond the visible seam; it must not be increased blindly.
+2. The normalized shader divisor is 2^24 while the D24 attachment has 2^24-1 representable intervals. The CPU bias conversion uses the latter scale. This is a small, deliberate-or-incidental scale difference worth retaining in the precision review; it is not by itself proof of a defect.
+3. Because the attachment format is selected per device, depth-quantization behavior must be recorded on the Galaxy S24 Ultra during later device validation. Static source review cannot establish which candidate format that phone actually selects.
+4. The shader path has both linear and perspective depth interpolation variants. Their selection and the W-buffer/Z-buffer combinations must be covered by regression tests, especially at overlapping coplanar edges and with the user's snow/shadow flicker scenes.
+
+No Vulkan source change is justified by this audit alone. The findings are static-only: no shader compilation, C++ build, automated test, APK, or device validation was performed.
