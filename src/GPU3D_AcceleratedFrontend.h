@@ -75,6 +75,11 @@ struct AcceleratedSceneVertex
 {
     u32 XFixed = 0;
     u32 YFixed = 0;
+    // Unexpanded DS viewport coordinates, retained for future edge-coverage evaluation.
+    // Valid only for original polygon perimeter vertices; synthetic vertices stay invalid.
+    s32 OriginalXFixed = 0;
+    s32 OriginalYFixed = 0;
+    bool HasOriginalScreenCoords = false;
     float X = 0.0f;
     float Y = 0.0f;
     u32 Z = 0;
