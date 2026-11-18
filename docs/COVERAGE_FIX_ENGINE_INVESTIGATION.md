@@ -348,3 +348,9 @@ Commit `762577831d92ac01ba4f8ab7ff5e9853cf7f2e0e` updates `selectGraphicsDepthSt
 This is a narrowly scoped capability-validation correction. It adds no render pass, GPU pass, allocation, per-frame work, or synchronization and therefore has no expected frame-time cost. It may select a later supported depth format on a device where the first candidate cannot satisfy the full usage combination.
 
 Validation status: source change committed; not compiled, not run on Android, and not tested with the S24 Ultra / Mr Purple T30. Runtime format selection and image creation still require device validation. No APK or CI build was started.
+
+## Follow-up: remove per-polygon heap allocation from scene construction
+
+The accelerated scene builder previously created a local `std::vector<u16>` for every accepted polygon and called `reserve` for its vertex-index list. Since a DS polygon contains at most 10 source vertices and the BetterPolygons path adds at most one center vertex, this list has a strict maximum of 11 entries. The list now uses a fixed `std::array<u16, 11>` plus an active count.
+
+This removes the per-polygon heap allocation while preserving the existing index order, Y-bound calculation, triangulation, and boundary-flag logic. It adds no GPU work and no per-frame instrumentation. The change is a targeted CPU/allocation optimization that may reduce allocator overhead and improve scene-build consistency in polygon-heavy scenes; its actual FPS and thermal impact still require profiling on the target device. It has not been compiled or runtime-tested yet.
