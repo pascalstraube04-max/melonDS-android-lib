@@ -282,3 +282,8 @@ A further static-review correction (dc0620915686d32e3d987ed9e5e5ce58eeb0f4b7) ma
 ### Follow-up source audit: fan center and depth scope
 
 The accelerated scene builder computes the optional polygon-fan center after `resolveFixedCoords()` has applied the expanded outer coordinates. Thus the fan center follows the expanded contour rather than remaining at the original center; this is internally consistent for the position geometry. Its color, texture coordinates, W and Z are still reconstructed from the original polygon attributes using the existing perspective-weighted averaging. The same `makeTriangleVertex()` path applies the configured user depth bias to every emitted vertex for that polygon, including the fan center and boundary-line quads. No selective edge-only depth correction exists in this path. Changing that now would require a separate depth model and risks altering DS depth ordering, so the bias remains untouched pending a controlled test.
+
+
+### Configuration-scope audit
+
+The Vulkan path under investigation sets `UseHiresCoordinates = true`, so the coverage helper's high-resolution coordinate resolution matches the scene builder's normal vertex path. The legacy/non-hires branch uses a different coordinate conversion in `resolveFixedCoords()`; coverage-enabled builds with `UseHiresCoordinates = false` and `Scale > 1` need a separate consistency check before this helper is generalized to that configuration. This does not affect the current Vulkan configuration, but it remains an explicit scope limitation. The project is C++17 and this translation unit includes `<cmath>` for the geometry math.
