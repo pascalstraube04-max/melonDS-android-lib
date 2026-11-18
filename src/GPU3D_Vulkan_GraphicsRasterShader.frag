@@ -424,10 +424,35 @@ float edgeCross(vec2 a, vec2 b, vec2 p)
     return edge.x * rel.y - edge.y * rel.x;
 }
 
-bool isDsTopLeftEdge(vec2 a, vec2 b)
+bool shouldFillDsBoundaryEdge(vec2 a, vec2 b, float interiorSide)
 {
+    // The DS software renderer fills both polygon edges for edge marking /
+    // antialiasing and for translucent polygons when 3D alpha blending is on.
+    uint polyAlpha = (fTriInfo1.z >> 16u) & 0x1Fu;
+    bool edgeMarkingEnabled = (pc.dispCnt & ((1u << 4u) | (1u << 5u))) != 0u;
+    bool translucentBlendEnabled = polyAlpha < 31u && (pc.dispCnt & (1u << 3u)) != 0u;
+    if (edgeMarkingEnabled || translucentBlendEnabled)
+        return true;
+
     vec2 delta = b - a;
-    return abs(delta.y) < 0.00001 ? delta.x > 0.0 : delta.y < 0.0;
+    float dx = abs(delta.x);
+    float dy = abs(delta.y);
+    if (dy < 0.00001)
+        return true;
+
+    // GPU3D_Soft::Slope uses a 18-bit fixed-point increment and classifies
+    // X-major only when the increment is strictly greater than 1.0.
+    bool xMajor = dx > dy;
+    bool negative = (delta.y > 0.0) ? (delta.x < 0.0) : (delta.x > 0.0);
+    bool rightEdge = delta.y * interiorSide > 0.0;
+    bool verticalEdge = dx < 0.00001;
+
+    // Mirrors the ordinary opaque left/right edge-fill cases in GPU3D_Soft.
+    // The special bottom-row and coincident-edge exceptions are handled in
+    // a later refinement once polygon-wide scanline metadata is carried here.
+    if (rightEdge)
+        return (!negative && xMajor) || verticalEdge;
+    return negative || !xMajor;
 }
 
 vec2 dsCoveragePixelCenter()
@@ -487,10 +512,7 @@ void applyDsBoundaryCoverage()
             discard;
         if (abs(orientedSample) <= 0.0001)
         {
-            bool includeBoundary = interiorSide > 0.0
-                ? isDsTopLeftEdge(a, b)
-                : isDsTopLeftEdge(b, a);
-            if (!includeBoundary)
+            if (!shouldFillDsBoundaryEdge(a, b, interiorSide))
                 discard;
         }
     }
