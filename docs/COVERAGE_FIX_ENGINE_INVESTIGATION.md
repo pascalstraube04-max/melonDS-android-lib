@@ -94,3 +94,13 @@ The Android repository's `.gitmodules` currently points the submodule URL at `ht
 A GitHub Actions workflow exists at `.github/workflows/main.yaml`. It triggers on pushes to any branch and supports manual dispatch. It checks out recursive submodules, sets up Java 21 and Android SDK, runs `./gradlew :app:regenerateVulkanSpirv :app:assembleGitHubNightlyRelease`, then uploads the APK and attempts to update the nightly release. The workflow references signing secrets (`MELONDS_KEYSTORE`, `MELONDS_KEYSTORE_PASSWORD`), so availability of those secrets in the user's fork must be confirmed before assuming the release build will complete. The workflow's artifact upload may still be usable if the build step is adjusted to avoid unavailable signing secrets, but no workflow change has been made.
 
 This establishes a viable cloud build route for future test APKs, subject to submodule integration and signing configuration. No workflow has been run for the investigation branch and no APK has been produced.
+## User test priority: lower edge of the lower display
+
+The user reports that black coverage cracks are most noticeable along the bottom edge of the lower DS screen. Prioritize this boundary in the next diagnostic pass:
+
+- Count coverage-fix rejections caused by yFixed > MaxFixedY separately from top, left, and right overflow.
+- Record whether a polygon crosses only the lower boundary or multiple boundaries; keep samples bounded and diagnostics opt-in.
+- Correlate lower-boundary rejections with the visible crack locations before changing the geometry path.
+- Do not assume every lower-edge crack is caused by this guard: also inspect raster edge ownership / triangle boundary handling at the target's final scanlines if the guard counts do not correlate.
+
+For the current Vulkan target, the viewport is 256 * scale by 192 * scale, with fixed-point maxima set to dimension * 16 minus one. The lower-edge test therefore concerns projected Y values beyond MaxFixedY, not merely vertices marked Clipped by the earlier DS homogeneous clipper.
