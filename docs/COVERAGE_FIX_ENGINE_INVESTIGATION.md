@@ -253,3 +253,10 @@ Required next checks before treating this as an engine-complete change:
 3. Verify attribute interpolation and fan triangulation remain visually stable after moving only outer vertices.
 4. Test lower-screen clipping, snow, building shadows, repeated/clamped textures, and long-session 6x performance on the S24 Ultra.
 5. Revisit depth bias separately; this prototype does not change the polygon-wide Z shift.
+
+
+The convex-offset prototype was subsequently hardened on the same investigation branch:
+- Missing source vertices now preserve the available source coordinates rather than collapsing those vertices to the zero-initialized output.
+- Near-zero-area and non-convex polygons fall back to the prior radial expansion.
+- Edge normals are precomputed once per polygon edge and shared by adjacent vertices. The ordinary corner intersection uses an algebraic miter expression; an extra square root is needed only when enforcing the acute-corner miter cap. This keeps the normal-construction cost near one normalization per vertex rather than recalculating both adjacent edges at every corner.
+- The Vulkan scene builder passes the user expansion value directly as target-screen pixels and clamps it to 0..2.0. At 6x this remains a high-resolution-pixel distance; the code does not multiply the expansion a second time by the 6x scale.
