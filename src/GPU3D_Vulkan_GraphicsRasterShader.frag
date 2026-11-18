@@ -76,6 +76,11 @@ layout(location = 3) smooth in float fDepthPerspective;
 layout(location = 4) flat in uvec4 fTriInfo0;
 layout(location = 5) flat in uvec4 fTriInfo1;
 layout(location = 6) flat in vec4 fTexcoordBounds;
+layout(location = 7) flat in vec4 fOriginalEdge01;
+layout(location = 8) flat in vec2 fOriginalEdge2;
+layout(location = 9) flat in uint fOriginalEdgeFlags;
+layout(location = 10) flat in vec4 fRasterTriangle01;
+layout(location = 11) flat in vec2 fRasterTriangle2;
 
 layout(location = 0) out vec4 oColor;
 #if MELONDS_COLOR_ONLY == 0
@@ -412,8 +417,85 @@ vec4 encodeColorDsTranslucentBlendAlpha(Color6A5 color)
         float(clamp(color.a + 1, 0, 32)) * (1.0 / 32.0));
 }
 
+float edgeCross(vec2 a, vec2 b, vec2 p)
+{
+    vec2 edge = b - a;
+    vec2 rel = p - a;
+    return edge.x * rel.y - edge.y * rel.x;
+}
+
+bool isDsTopLeftEdge(vec2 a, vec2 b)
+{
+    vec2 delta = b - a;
+    return abs(delta.y) < 0.00001 ? delta.x > 0.0 : delta.y < 0.0;
+}
+
+vec2 dsCoveragePixelCenter()
+{
+    vec2 renderScale = max(vec2(float(pc.width) * (1.0 / 256.0),
+                                float(pc.height) * (1.0 / 192.0)), vec2(1.0));
+    vec2 subpixelOffset = mod(gl_FragCoord.xy - vec2(0.5), renderScale);
+    vec2 dsPixelCenterOffset = max((renderScale - vec2(1.0)) * 0.5, vec2(0.0));
+    return gl_FragCoord.xy + dsPixelCenterOffset - subpixelOffset;
+}
+
+void applyDsBoundaryCoverage()
+{
+    const uint COVERAGE_FIX = 1u << 3u;
+    const uint EDGE0 = 1u << 7u;
+    const uint EDGE1 = 1u << 8u;
+    const uint EDGE2 = 1u << 9u;
+    if ((fTriInfo0.x & COVERAGE_FIX) == 0u)
+        return;
+
+    vec2 raster0 = fRasterTriangle01.xy;
+    vec2 raster1 = fRasterTriangle01.zw;
+    vec2 raster2 = fRasterTriangle2;
+    vec2 original0 = fOriginalEdge01.xy;
+    vec2 original1 = fOriginalEdge01.zw;
+    vec2 original2 = fOriginalEdge2;
+    vec2 samplePoint = dsCoveragePixelCenter();
+
+    // Edge 0 is vertex 1 -> 2; edge 1 is 2 -> 0; edge 2 is 0 -> 1.
+    // Synthetic fan diagonals are intentionally left to Vulkan's top-left rule.
+    for (uint edgeIndex = 0u; edgeIndex < 3u; edgeIndex++)
+    {
+        uint edgeBit = edgeIndex == 0u ? EDGE0 : (edgeIndex == 1u ? EDGE1 : EDGE2);
+        if ((fTriInfo0.x & edgeBit) == 0u)
+            continue;
+
+        uint startIndex = edgeIndex == 0u ? 1u : (edgeIndex == 1u ? 2u : 0u);
+        uint endIndex = edgeIndex == 0u ? 2u : (edgeIndex == 1u ? 0u : 1u);
+        uint oppositeIndex = edgeIndex == 0u ? 0u : (edgeIndex == 1u ? 1u : 2u);
+        if ((fOriginalEdgeFlags & (1u << startIndex)) == 0u
+            || (fOriginalEdgeFlags & (1u << endIndex)) == 0u)
+            continue;
+
+        vec2 a = startIndex == 0u ? original0 : (startIndex == 1u ? original1 : original2);
+        vec2 b = endIndex == 0u ? original0 : (endIndex == 1u ? original1 : original2);
+        vec2 opposite = oppositeIndex == 0u ? raster0 : (oppositeIndex == 1u ? raster1 : raster2);
+        float interiorSide = edgeCross(a, b, opposite);
+        float sampleSide = edgeCross(a, b, samplePoint);
+        if (abs(interiorSide) < 0.00001)
+            continue;
+
+        float orientedSample = sampleSide * sign(interiorSide);
+        if (orientedSample < -0.0001)
+            discard;
+        if (abs(orientedSample) <= 0.0001)
+        {
+            bool includeBoundary = interiorSide > 0.0
+                ? isDsTopLeftEdge(a, b)
+                : isDsTopLeftEdge(b, a);
+            if (!includeBoundary)
+                discard;
+        }
+    }
+}
+
 void main()
 {
+    applyDsBoundaryCoverage();
 #if MELONDS_FAST_OPAQUE_MODULATE != 0 && MELONDS_FAST_TEXTURE_PUSH_CONSTANTS != 0 && MELONDS_FAST_TOON_MODE == 1
     if (TRANSLUCENT_PASS == 0u && EDGE_MARK_PASS == 0u
         && (pc.dispCnt & (1u << 1u)) == 0u)
