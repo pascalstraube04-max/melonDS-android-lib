@@ -40,11 +40,13 @@ layout(location = 8) flat out vec2 fOriginalEdge2;
 layout(location = 9) flat out uint fOriginalEdgeFlags;
 layout(location = 10) flat out vec4 fRasterTriangle01;
 layout(location = 11) flat out vec2 fRasterTriangle2;
+layout(location = 12) flat out uint fOriginalYBottom;
 
 struct TriangleData
 {
     float fields[36];
     uint originalFlags;
+    uint originalYBottom;
 };
 
 layout(set = 0, binding = 0, std430) readonly buffer TriangleBuffer
@@ -92,4 +94,5 @@ void main()
                            triangle.fields[32], triangle.fields[33]);
     fOriginalEdge2 = vec2(triangle.fields[34], triangle.fields[35]);
     fOriginalEdgeFlags = triangle.originalFlags;
+    fOriginalYBottom = triangle.originalYBottom;
 }
