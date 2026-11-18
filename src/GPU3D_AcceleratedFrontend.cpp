@@ -214,16 +214,38 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
     if (polygon.NumVertices < 3u || polygon.NumVertices > baseX.size())
         return;
 
+    u32 validVertexCount = 0u;
     for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
     {
         const Vertex* vertex = polygon.Vertices[vertexIndex];
         if (vertex == nullptr)
-            return;
+            continue;
 
         const s32 xFixed = ResolveAcceleratedVertexFixedX(*vertex, scale, useHiresCoordinates);
         const s32 yFixed = ResolveAcceleratedVertexFixedY(*vertex, scale, useHiresCoordinates);
         baseX[vertexIndex] = static_cast<double>(xFixed) * (1.0 / 16.0);
         baseY[vertexIndex] = static_cast<double>(yFixed) * (1.0 / 16.0);
+        validVertexCount++;
+    }
+
+    if (validVertexCount < 3u)
+        return;
+    if (validVertexCount != polygon.NumVertices)
+    {
+        // A malformed polygon with missing source vertices must not collapse
+        // its remaining vertices to the zero-filled output defaults.
+        for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
+        {
+            if (polygon.Vertices[vertexIndex] == nullptr)
+                continue;
+            outX[vertexIndex] = static_cast<u32>(std::clamp(
+                static_cast<s32>(std::lround(baseX[vertexIndex] * 16.0)),
+                0, std::max(maxFixedX, 0)));
+            outY[vertexIndex] = static_cast<u32>(std::clamp(
+                static_cast<s32>(std::lround(baseY[vertexIndex] * 16.0)),
+                0, std::max(maxFixedY, 0)));
+        }
+        return;
     }
 
     const auto writeRadialFallback = [&]() {
