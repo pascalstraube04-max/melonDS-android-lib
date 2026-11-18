@@ -226,9 +226,38 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         baseY[vertexIndex] = static_cast<double>(yFixed) * (1.0 / 16.0);
     }
 
-    // DS polygons remain convex after homogeneous clipping. Offset each edge
-    // along its outward normal and intersect adjacent offset lines at corners.
-    // A bounded miter avoids unbounded spikes for nearly collinear vertices.
+    const auto writeRadialFallback = [&]() {
+        double centerX = 0.0;
+        double centerY = 0.0;
+        for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
+        {
+            centerX += baseX[vertexIndex];
+            centerY += baseY[vertexIndex];
+        }
+        centerX /= static_cast<double>(polygon.NumVertices);
+        centerY /= static_cast<double>(polygon.NumVertices);
+
+        for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
+        {
+            const double dx = baseX[vertexIndex] - centerX;
+            const double dy = baseY[vertexIndex] - centerY;
+            const double length = std::hypot(dx, dy);
+            const double inverseLength = length > 0.000001 ? 1.0 / length : 0.0;
+            const s32 xFixed = std::clamp(
+                static_cast<s32>(std::lround((baseX[vertexIndex] + dx * inverseLength * coverageFixPx) * 16.0)),
+                0, std::max(maxFixedX, 0));
+            const s32 yFixed = std::clamp(
+                static_cast<s32>(std::lround((baseY[vertexIndex] + dy * inverseLength * coverageFixPx) * 16.0)),
+                0, std::max(maxFixedY, 0));
+            outX[vertexIndex] = static_cast<u32>(xFixed);
+            outY[vertexIndex] = static_cast<u32>(yFixed);
+        }
+    };
+
+    // For convex DS polygons, offset each edge along its outward normal and
+    // intersect adjacent offset lines at corners. A bounded miter avoids
+    // unbounded spikes for nearly collinear vertices. Clipping preserves
+    // convexity, but the source quad is checked rather than assumed convex.
     double signedAreaTwice = 0.0;
     for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
     {
@@ -239,21 +268,27 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
 
     if (std::abs(signedAreaTwice) < 0.000001)
     {
-        // Preserve the source polygon if its winding/area is numerically
-        // degenerate; zero-filled output coordinates would collapse it.
-        for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
-        {
-            outX[vertexIndex] = static_cast<u32>(std::clamp(
-                static_cast<s32>(std::lround(baseX[vertexIndex] * 16.0)),
-                0, std::max(maxFixedX, 0)));
-            outY[vertexIndex] = static_cast<u32>(std::clamp(
-                static_cast<s32>(std::lround(baseY[vertexIndex] * 16.0)),
-                0, std::max(maxFixedY, 0)));
-        }
+        writeRadialFallback();
         return;
     }
 
     const double orientation = signedAreaTwice > 0.0 ? 1.0 : -1.0;
+    for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
+    {
+        const u32 previousIndex = (vertexIndex + polygon.NumVertices - 1u) % polygon.NumVertices;
+        const u32 nextIndex = (vertexIndex + 1u) % polygon.NumVertices;
+        const double edge0X = baseX[vertexIndex] - baseX[previousIndex];
+        const double edge0Y = baseY[vertexIndex] - baseY[previousIndex];
+        const double edge1X = baseX[nextIndex] - baseX[vertexIndex];
+        const double edge1Y = baseY[nextIndex] - baseY[vertexIndex];
+        const double turn = edge0X * edge1Y - edge0Y * edge1X;
+        if (orientation * turn < -0.000001)
+        {
+            writeRadialFallback();
+            return;
+        }
+    }
+
     const double maxMiterLength = static_cast<double>(coverageFixPx) * 4.0;
 
     for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
