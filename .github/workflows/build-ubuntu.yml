@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - ci/*
+      - coverage-fix-engine-investigation
   pull_request:
     branches:
       - master
