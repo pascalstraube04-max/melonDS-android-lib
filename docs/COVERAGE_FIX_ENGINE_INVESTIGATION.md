@@ -270,10 +270,15 @@ These are hand-checkable expectations for the new convex offset, not substitutes
 - The same square with reversed winding should produce the same expanded outline in the corresponding reversed vertex order.
 - A triangle should offset each straight side by the requested perpendicular distance; corner miters follow the adjacent-normal intersection, subject to the 4x cap.
 - A concave or near-zero-area polygon should take the radial fallback, not the convex miter path.
-- Duplicate consecutive vertices should not generate a division by zero; the affected vertex remains at its source coordinate.
+- Duplicate consecutive vertices should not generate a division by zero; the entire polygon takes the radial fallback so the outline does not mix miter-expanded and unexpanded corners.
 - At 6x, exact bottom-boundary Y=18432 is admitted by the guard and expansion output clamps to 18431; Y=18433 remains strict overflow and disables the fix for that polygon.
 
 These expectations have not been run against compiled C++ code.
 
 
 A further static-review correction (dc0620915686d32e3d987ed9e5e5ce58eeb0f4b7) makes degenerate-edge handling consistent: if any polygon edge has effectively zero length, or adjacent outward normals have no stable miter intersection, the entire polygon uses the radial fallback. This avoids mixing unexpanded source vertices with miter-expanded neighbors along one outline. This remains uncompiled and untested.
+
+
+### Follow-up source audit: fan center and depth scope
+
+The accelerated scene builder computes the optional polygon-fan center after `resolveFixedCoords()` has applied the expanded outer coordinates. Thus the fan center follows the expanded contour rather than remaining at the original center; this is internally consistent for the position geometry. Its color, texture coordinates, W and Z are still reconstructed from the original polygon attributes using the existing perspective-weighted averaging. The same `makeTriangleVertex()` path applies the configured user depth bias to every emitted vertex for that polygon, including the fan center and boundary-line quads. No selective edge-only depth correction exists in this path. Changing that now would require a separate depth model and risks altering DS depth ordering, so the bias remains untouched pending a controlled test.
