@@ -218,3 +218,18 @@ The coordinate source was traced in `src/GPU3D.cpp`:
 This confirms the ordering relevant to the hypothesis: homogeneous clipping occurs first, and the exact screen-space viewport boundary can then be represented by the high-resolution viewport transform. A vertex on the lower viewport plane can therefore legitimately map to the exact bottom coordinate before the accelerated frontend applies its stricter `targetHeight * 16 - 1` maximum. At 6x that exact coordinate becomes 18432 after scaling, versus the current maximum 18431.
 
 Important qualification: this source trace confirms the arithmetic path and makes exact-boundary contact a valid case to test; it does not yet prove that a particular game scene emits such a vertex after the viewport transform, nor that it is the only cause of the user's remaining cracks. The next step remains bounded per-side diagnostics, followed by a deterministic exact-boundary/strict-overflow test. No renderer behavior was changed in this follow-up.
+
+
+## Candidate change: allow the exact mathematical right/bottom boundary
+
+Commit `cb19a69d2aec49cc91e0d4e4aa6f7672750cbcac` changes the accelerated frontend guard to compare against `MaxFixedX + 1` and `MaxFixedY + 1` using 64-bit temporaries. This admits the exact mathematical right/bottom viewport plane while continuing to reject coordinates strictly beyond it. The coverage-expansion helper still clamps generated coordinates to the last addressable fixed-point coordinate (`MaxFixed*`), so this change does not intentionally enlarge the render target.
+
+The source trace supports the four-fractional-bit interpretation: `SubmitPolygon()` performs homogeneous clipping before calculating `HiresPosition`, and the viewport transform multiplies by 16 before integer division. At 6x, the exact lower plane is 18432 while the last addressable coordinate is 18431.
+
+Review caveats before treating this as validated:
+- The guard currently uses the `+1` allowance for both coordinate modes. The Vulkan scene builder currently selects `UseHiresCoordinates = true`; the non-hires branch should still be checked against its integer-pixel convention before this code is reused elsewhere.
+- The guard is still all-or-nothing for strict overflow. A polygon with one genuinely out-of-range vertex still loses coverage-fix eligibility as before.
+- The candidate has not been compiled or tested on a device. It is not yet established that the game emits exact-boundary vertices frequently, or that this change removes the visible lower-screen cracks.
+- No evidence yet that the patch changes depth ordering or flicker; depth bias behavior remains a separate issue and must be tested with snow and building shadows.
+
+Build verification status: the repository's Ubuntu workflow is present on the default `DevelopSub` branch and its push filter includes `ci/*`. A dedicated `ci/coverage-boundary-check` branch and a workflow-file commit were created, but the Actions API currently reports zero workflow runs and zero status checks. Therefore there is no successful build result to report. The workflow has `continue-on-error: true`, so any eventual run must be checked at the individual job/log level rather than relying only on an overall workflow conclusion.
