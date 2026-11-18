@@ -306,3 +306,17 @@ The output is rounded to 1/16-pixel fixed units and clamped independently to the
 The fan center is recomputed from the expanded outer positions, but its perspective-weighted color, texture coordinates, W and Z are derived from the original source vertices. That preserves the existing attribute construction and keeps the center inside the expanded contour, but it does slightly change the geometric interpolation domain. Textured polygons with strong perspective gradients therefore need explicit visual regression testing; source-level review alone cannot establish that the texture remains visually unchanged.
 
 No further renderer change is justified by this review. In particular, do not raise the miter cap or alter depth bias speculatively. The required deterministic cases remain: both windings, right/obtuse/acute corners, nearly collinear edges, duplicate vertices, concave fallback, exact viewport-boundary contact, and perspective-textured quads. All findings remain static-only; no compile, automated test, Android integration, or device validation has been performed.
+
+
+### Follow-up: source clipper limits and pathological-W caveat
+
+The DS homogeneous clipper was re-opened at the implementation level rather than relying only on the call-site trace:
+
+- `ClipAgainstPlane` uses a fixed `Vertex temp[10]` buffer, matching the `Polygon::Vertices[10]` storage inspected in `GPU3D.h`.
+- The clip sequence is Z, then Y, then X. Intersections are generated into the polygon vertex sequence before the viewport transform.
+- The clipper source itself retains explicit TODOs about hardware differences for vertices with W=0 and unusual Y results. This means ordinary convex clipping behavior is well understood, but pathological zero-W cases are not proven equivalent to physical DS hardware.
+- The accelerated frontend rejects degenerate polygons and polygons with fewer than three vertices before the coverage helper runs; the helper also bounds its local arrays to ten entries.
+
+Engineering consequence: the convex miter path is a reasonable candidate for normal clipped convex polygons, but the clipper's documented W=0 uncertainty prevents claiming that every possible post-clip polygon is a well-formed convex contour. The current convexity / area / zero-edge checks provide fallback protection for several malformed shapes, but they are not a substitute for a deterministic test of zero-W and near-zero-W clipping.
+
+No code change was made: changing the DS clipper or its fixed-size buffering without reproducing a failure would broaden risk beyond the Vulkan coverage issue. Add W=0 and near-zero-W cases to the eventual geometry regression set. Static review only; no build, CI, or device test was run.
