@@ -228,8 +228,6 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         validVertexCount++;
     }
 
-    if (validVertexCount < 3u)
-        return;
     if (validVertexCount != polygon.NumVertices)
     {
         // A malformed polygon with missing source vertices must not collapse
