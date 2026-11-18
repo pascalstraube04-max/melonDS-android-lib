@@ -887,7 +887,7 @@ void BuildAcceleratedScene(
             for (u32 vertexIndex = 2u; vertexIndex < polygonVertexIndexCount; vertexIndex++)
             {
                 u32 boundaryFlags = AcceleratedTriangleBoundaryEdge0;
-                if (vertexIndex + 1u == polygonVertexIndices.size())
+                if (vertexIndex + 1u == polygonVertexIndexCount)
                     boundaryFlags |= AcceleratedTriangleBoundaryEdge1;
                 if (vertexIndex == 2u)
                     boundaryFlags |= AcceleratedTriangleBoundaryEdge2;
