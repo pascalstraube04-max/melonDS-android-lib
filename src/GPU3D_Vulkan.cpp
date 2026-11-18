@@ -7176,7 +7176,9 @@ void VulkanRenderer3D::destroyFaithfulRasterProductSlot(FaithfulRasterProductSlo
 
 bool VulkanRenderer3D::ensureTriangleBuffer(RenderContext* context, size_t triangleCount)
 {
-    static_assert(sizeof(TriangleGpu) == 120, "TriangleGpu layout must match std430 shader struct");
+    static_assert(sizeof(TriangleGpu) == 148, "TriangleGpu layout must match std430 shader struct");
+    static_assert(offsetof(TriangleGpu, originalX0) == 120u, "TriangleGpu original coordinates offset mismatch");
+    static_assert(offsetof(TriangleGpu, originalFlags) == 144u, "TriangleGpu original flags offset mismatch");
     VkBuffer& triangleBuffer = context != nullptr ? context->TriangleBuffer : TriangleBuffer;
     VkDeviceMemory& triangleMemory = context != nullptr ? context->TriangleMemory : TriangleMemory;
     VkDeviceSize& triangleBufferSize = context != nullptr ? context->TriangleBufferSize : TriangleBufferSize;
@@ -13647,6 +13649,9 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
         float v = 0.0f;
         u32 colorRgba8 = 0;
         u32 wRaw = 1u;
+        float originalX = 0.0f;
+        float originalY = 0.0f;
+        bool hasOriginalScreenCoords = false;
     };
 
     constexpr u32 kTriangleFlagTranslucent = 1u << 0u;
@@ -14268,6 +14273,9 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
             triangleVertex.u = static_cast<float>(vertex.TexCoordS);
             triangleVertex.v = static_cast<float>(vertex.TexCoordT);
             triangleVertex.colorRgba8 = colorOverride.value_or(makeColor(vertex));
+            triangleVertex.originalX = static_cast<float>(vertex.OriginalXFixed) * (1.0f / 16.0f);
+            triangleVertex.originalY = static_cast<float>(vertex.OriginalYFixed) * (1.0f / 16.0f);
+            triangleVertex.hasOriginalScreenCoords = vertex.HasOriginalScreenCoords;
             return triangleVertex;
         };
 
@@ -14371,6 +14379,16 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
 
             triangle.polyAttr = polygonMeta.PolyAttr;
             triangle.variantKey = 0u;
+            triangle.originalX0 = vertex0.originalX;
+            triangle.originalY0 = vertex0.originalY;
+            triangle.originalX1 = vertex1.originalX;
+            triangle.originalY1 = vertex1.originalY;
+            triangle.originalX2 = vertex2.originalX;
+            triangle.originalY2 = vertex2.originalY;
+            triangle.originalFlags =
+                (vertex0.hasOriginalScreenCoords ? 1u : 0u)
+                | (vertex1.hasOriginalScreenCoords ? 2u : 0u)
+                | (vertex2.hasOriginalScreenCoords ? 4u : 0u);
             if (hasTexture)
                 triangle.variantKey |= kVariantFlagTextured;
             if (blendMode == 2u)
