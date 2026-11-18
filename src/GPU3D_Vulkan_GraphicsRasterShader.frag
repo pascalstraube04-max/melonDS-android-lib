@@ -436,17 +436,26 @@ bool shouldFillDsBoundaryEdge(vec2 a, vec2 b, float interiorSide, vec2 samplePoi
         return true;
 
     vec2 delta = b - a;
-    float dx = abs(delta.x);
-    float dy = abs(delta.y);
-    if (dy < 0.00001)
+    vec2 renderScale = max(vec2(float(pc.width) * (1.0 / 256.0),
+                                float(pc.height) * (1.0 / 192.0)), vec2(1.0));
+    vec2 dsA = floor(a / renderScale);
+    vec2 dsB = floor(b / renderScale);
+    vec2 dsDelta = dsB - dsA;
+    int xlen = int(abs(dsDelta.x));
+    int ylen = int(abs(dsDelta.y));
+    if (ylen == 0)
         return true;
 
-    // GPU3D_Soft::Slope uses a 18-bit fixed-point increment and classifies
-    // X-major only when the increment is strictly greater than 1.0.
-    bool xMajor = dx > dy;
-    bool negative = (delta.y > 0.0) ? (delta.x < 0.0) : (delta.x > 0.0);
+    // Reproduce the DS 18-bit reciprocal slope classification, including
+    // its exact 1.0 special case, from integer viewport coordinates.
+    int yrecip = 262144 / ylen;
+    int increment = (ylen == xlen && xlen != 1)
+        ? 262144
+        : abs(int(dsDelta.x) * yrecip);
+    bool xMajor = increment > 262144;
+    bool negative = (dsDelta.y > 0.0) ? (dsDelta.x < 0.0) : (dsDelta.x > 0.0);
     bool rightEdge = delta.y * interiorSide > 0.0;
-    bool verticalEdge = dx < 0.00001;
+    bool verticalEdge = increment == 0;
 
     float renderScaleY = max(float(pc.height) * (1.0 / 192.0), 1.0);
     uint nativeSampleY = uint(max(floor(samplePoint.y / renderScaleY), 0.0));
