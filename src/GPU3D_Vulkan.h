@@ -386,6 +386,13 @@ private:
         u32 texParam;
         u32 polyAttr;
         u32 variantKey;
+        float originalX0;
+        float originalY0;
+        float originalX1;
+        float originalY1;
+        float originalX2;
+        float originalY2;
+        u32 originalFlags;
     };
 
     struct GraphicsVertexGpu
