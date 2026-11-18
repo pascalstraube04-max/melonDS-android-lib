@@ -4282,16 +4282,35 @@ bool VulkanRenderer3D::selectGraphicsDepthStencilFormat()
         VK_FORMAT_D32_SFLOAT_S8_UINT,
         VK_FORMAT_D16_UNORM_S8_UINT,
     };
+    constexpr VkImageUsageFlags requiredUsage =
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+        | VK_IMAGE_USAGE_SAMPLED_BIT
+        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     for (const VkFormat candidate : candidates)
     {
         VkFormatProperties formatProperties{};
         vkGetPhysicalDeviceFormatProperties(PhysicalDevice, candidate, &formatProperties);
-        if ((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
-        {
-            GraphicsDepthStencilFormat = candidate;
-            return true;
-        }
+        if ((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0)
+            continue;
+
+        // The depth image is also sampled and copied from. Checking only the
+        // attachment feature does not prove that this complete image usage is
+        // supported for the selected format.
+        VkImageFormatProperties imageFormatProperties{};
+        const VkResult imageFormatResult = vkGetPhysicalDeviceImageFormatProperties(
+            PhysicalDevice,
+            candidate,
+            VK_IMAGE_TYPE_2D,
+            VK_IMAGE_TILING_OPTIMAL,
+            requiredUsage,
+            0,
+            &imageFormatProperties);
+        if (imageFormatResult != VK_SUCCESS)
+            continue;
+
+        GraphicsDepthStencilFormat = candidate;
+        return true;
     }
 
     GraphicsDepthStencilFormat = VK_FORMAT_UNDEFINED;
