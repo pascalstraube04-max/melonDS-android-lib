@@ -4,7 +4,7 @@ Branch: `coverage-fix-engine-investigation`
 
 ## Scope
 
-This branch is an isolated investigation branch. No renderer behavior has been changed yet.
+This branch is an isolated investigation branch. It now contains a candidate convex-polygon coverage-expansion prototype and an exact-viewport-boundary guard adjustment. These changes are uncompiled and unvalidated; they are not yet a confirmed fix.
 
 ## Confirmed code paths
 
