@@ -233,3 +233,23 @@ Review caveats before treating this as validated:
 - No evidence yet that the patch changes depth ordering or flicker; depth bias behavior remains a separate issue and must be tested with snow and building shadows.
 
 Build verification status: the repository's Ubuntu workflow is present on the default `DevelopSub` branch and its push filter includes `ci/*`. A dedicated `ci/coverage-boundary-check` branch and a workflow-file commit were created, but the Actions API currently reports zero workflow runs and zero status checks. Therefore there is no successful build result to report. The workflow has `continue-on-error: true`, so any eventual run must be checked at the individual job/log level rather than relying only on an overall workflow conclusion.
+
+
+## Prototype: edge-normal offset for convex polygons
+
+Commit `77378f2de915b4ccdb53c750857bff4dde7b71cf` replaces the radial-only expansion for convex polygons with an edge-normal offset: adjacent outward edge normals are combined at each corner and intersected as a miter. The miter length is capped at four times the requested expansion to avoid unbounded spikes near acute/degenerate corners. A subsequent correction in `31d83719a62d03885fa4464709ea738f7adbf4a1` preserves the previous radial behavior as a fallback for non-convex or near-zero-area polygons, rather than leaving zero-filled coordinates.
+
+This is a geometry prototype, not a validated fix. Static review points:
+- The method assumes the polygon boundary is consistently ordered; winding is derived from signed area.
+- Convexity is checked before applying the miter offset. Non-convex inputs use the prior radial method.
+- Consecutive duplicate/near-zero edges keep the affected source vertex rather than normalizing a zero-length edge.
+- The final expanded coordinates are still clamped to the render target, so viewport-edge corners can have a shorter effective offset.
+- The current all-or-nothing strict-overflow guard remains unchanged; the exact-boundary allowance is still only the earlier candidate.
+- No unit-test harness for this frontend helper was found in the repository tree. No compiler, CI, or device test has been run; no build was triggered.
+
+Required next checks before treating this as an engine-complete change:
+1. Compile the engine after explicit user build authorization.
+2. Add or run deterministic geometry checks for clockwise/counter-clockwise triangles and quads, near-collinear corners, duplicate vertices, and non-convex fallback.
+3. Verify attribute interpolation and fan triangulation remain visually stable after moving only outer vertices.
+4. Test lower-screen clipping, snow, building shadows, repeated/clamped textures, and long-session 6x performance on the S24 Ultra.
+5. Revisit depth bias separately; this prototype does not change the polygon-wide Z shift.
