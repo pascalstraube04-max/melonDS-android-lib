@@ -35,6 +35,22 @@ layout(location = 3) smooth out float fDepthPerspective;
 layout(location = 4) flat out uvec4 fTriInfo0;
 layout(location = 5) flat out uvec4 fTriInfo1;
 layout(location = 6) flat out vec4 fTexcoordBounds;
+layout(location = 7) flat out vec4 fOriginalEdge01;
+layout(location = 8) flat out vec2 fOriginalEdge2;
+layout(location = 9) flat out uint fOriginalEdgeFlags;
+layout(location = 10) flat out vec4 fRasterTriangle01;
+layout(location = 11) flat out vec2 fRasterTriangle2;
+
+struct TriangleData
+{
+    float fields[36];
+    uint originalFlags;
+};
+
+layout(set = 0, binding = 0, std430) readonly buffer TriangleBuffer
+{
+    TriangleData triangles[];
+};
 
 void main()
 {
@@ -65,4 +81,15 @@ void main()
     fTriInfo0 = vTriInfo0In;
     fTriInfo1 = uvec4(vTriInfo1In, 0u);
     fTexcoordBounds = vec4(vTexcoordBounds) * (1.0 / 16.0);
+
+    // gl_VertexIndex includes firstVertex; raster draws use three consecutive
+    // vertices per TriangleGpu record, so this selects the matching SSBO entry.
+    TriangleData triangle = triangles[uint(gl_VertexIndex) / 3u];
+    fRasterTriangle01 = vec4(triangle.fields[0], triangle.fields[1],
+                             triangle.fields[4], triangle.fields[5]);
+    fRasterTriangle2 = vec2(triangle.fields[8], triangle.fields[9]);
+    fOriginalEdge01 = vec4(triangle.fields[30], triangle.fields[31],
+                           triangle.fields[32], triangle.fields[33]);
+    fOriginalEdge2 = vec2(triangle.fields[34], triangle.fields[35]);
+    fOriginalEdgeFlags = triangle.originalFlags;
 }
