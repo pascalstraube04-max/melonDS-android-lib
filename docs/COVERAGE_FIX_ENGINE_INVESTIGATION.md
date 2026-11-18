@@ -287,3 +287,22 @@ The accelerated scene builder computes the optional polygon-fan center after `re
 ### Configuration-scope audit
 
 The Vulkan path under investigation sets `UseHiresCoordinates = true`, so the coverage helper's high-resolution coordinate resolution matches the scene builder's normal vertex path. The legacy/non-hires branch uses a different coordinate conversion in `resolveFixedCoords()`; coverage-enabled builds with `UseHiresCoordinates = false` and `Scale > 1` need a separate consistency check before this helper is generalized to that configuration. This does not affect the current Vulkan configuration, but it remains an explicit scope limitation. The project is C++17 and this translation unit includes `<cmath>` for the geometry math.
+
+
+### Follow-up: convex-offset numerical and interpolation review
+
+A line-by-line review of the current convex offset helper confirms the corner construction is mathematically consistent for a consistently wound convex polygon:
+
+- The signed area selects the winding.
+- Each edge gets one outward unit normal.
+- At each vertex, the adjacent normals are intersected using the miter factor `distance / (1 + dot(n0,n1))`.
+- For very acute corners the miter is capped at four times the requested distance; nearly opposite normals or zero-length edges send the whole polygon through the radial fallback.
+- The convexity test rejects a turn opposite to the polygon winding, while collinear turns remain eligible.
+
+The cap is intentionally conservative: at sufficiently acute corners the resulting outline is no longer a mathematically exact constant-distance offset, but it avoids extreme spikes. This may leave a small residual corner gap in pathological geometry; raising the cap globally would trade that for larger overdraw and unstable geometry, so it should only be changed in response to a reproducible test case.
+
+The output is rounded to 1/16-pixel fixed units and clamped independently to the last addressable viewport coordinate. Consequently, edges that reach the viewport boundary cannot retain the full requested offset in the outward direction. This is expected target clipping, not a guarantee of full-distance expansion at the attachment edge.
+
+The fan center is recomputed from the expanded outer positions, but its perspective-weighted color, texture coordinates, W and Z are derived from the original source vertices. That preserves the existing attribute construction and keeps the center inside the expanded contour, but it does slightly change the geometric interpolation domain. Textured polygons with strong perspective gradients therefore need explicit visual regression testing; source-level review alone cannot establish that the texture remains visually unchanged.
+
+No further renderer change is justified by this review. In particular, do not raise the miter cap or alter depth bias speculatively. The required deterministic cases remain: both windings, right/obtuse/acute corners, nearly collinear edges, duplicate vertices, concave fallback, exact viewport-boundary contact, and perspective-textured quads. All findings remain static-only; no compile, automated test, Android integration, or device validation has been performed.
