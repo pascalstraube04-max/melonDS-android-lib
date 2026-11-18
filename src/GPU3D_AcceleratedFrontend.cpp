@@ -859,8 +859,8 @@ void BuildAcceleratedScene(
             }
             else
             {
-                sceneVertex.OriginalXFixed = (vertex->FinalPosition[0] << 4) * safeScale;
-                sceneVertex.OriginalYFixed = (vertex->FinalPosition[1] << 4) * safeScale;
+                sceneVertex.OriginalXFixed = vertex->FinalPosition[0] * 16 * safeScale;
+                sceneVertex.OriginalYFixed = vertex->FinalPosition[1] * 16 * safeScale;
             }
             sceneVertex.HasOriginalScreenCoords = true;
             appendPolygonVertexIndex(sceneVertexIndex);
