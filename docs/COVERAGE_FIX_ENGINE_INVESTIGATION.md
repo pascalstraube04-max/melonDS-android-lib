@@ -104,3 +104,12 @@ The user reports that black coverage cracks are most noticeable along the bottom
 - Do not assume every lower-edge crack is caused by this guard: also inspect raster edge ownership / triangle boundary handling at the target's final scanlines if the guard counts do not correlate.
 
 For the current Vulkan target, the viewport is 256 * scale by 192 * scale, with fixed-point maxima set to dimension * 16 minus one. The lower-edge test therefore concerns projected Y values beyond MaxFixedY, not merely vertices marked Clipped by the earlier DS homogeneous clipper.
+
+
+## Follow-up: Vulkan fragment-depth and depth-test path verified
+
+The Vulkan raster vertex shader (`GPU3D_Vulkan_GraphicsRasterShader.vert`) converts the polygon vertex Z value into normalized depth using the 24-bit DS depth range and forwards both linear and perspective depth variants. The fragment shader (`GPU3D_Vulkan_GraphicsRasterShader.frag`) writes the selected interpolated value directly to `gl_FragDepth` in the fragment-depth variants. There is no later shader stage that restores the original depth or limits the coverage bias.
+
+The pipeline creation path in `GPU3D_Vulkan.cpp` confirms that opaque raster pipelines use depth testing and depth writes, with depth comparison selected between `VK_COMPARE_OP_LESS` and `VK_COMPARE_OP_LESS_OR_EQUAL` according to the emulated depth-compare mode. The selected depth attachment format is the first supported of D24_UNORM_S8, D32_SFLOAT_S8, or D16_UNORM_S8. Consequently, a polygon-wide Z shift can affect both depth comparison and the value stored in the depth attachment; the exact quantization depends on the selected device format.
+
+This reinforces the requirement that coverage bias must not be used as an unrestricted global polygon-depth nudge. A safer design should separate geometric edge coverage from depth handling, or constrain any depth adjustment to a mathematically justified boundary-only operation that does not reorder unrelated surfaces. The current code inspection does not yet establish a safe replacement algorithm; device-format selection and both depth-interpolation modes must be included in subsequent validation.
