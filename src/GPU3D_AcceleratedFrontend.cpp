@@ -310,20 +310,31 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
     }
 
     const double maxMiterLength = static_cast<double>(coverageFixPx) * 4.0;
+    std::array<double, 10> edgeNormalX{};
+    std::array<double, 10> edgeNormalY{};
+    std::array<bool, 10> edgeNormalValid{};
+
+    // Each edge normal is calculated once and shared by its two endpoints.
+    // This keeps the convex offset's square-root count close to the old
+    // one-normalization-per-vertex radial implementation.
+    for (u32 edgeIndex = 0; edgeIndex < polygon.NumVertices; edgeIndex++)
+    {
+        const u32 nextIndex = (edgeIndex + 1u) % polygon.NumVertices;
+        const double dx = baseX[nextIndex] - baseX[edgeIndex];
+        const double dy = baseY[nextIndex] - baseY[edgeIndex];
+        const double edgeLength = std::sqrt(dx * dx + dy * dy);
+        if (edgeLength < 0.000001)
+            continue;
+
+        edgeNormalX[edgeIndex] = orientation * dy / edgeLength;
+        edgeNormalY[edgeIndex] = -orientation * dx / edgeLength;
+        edgeNormalValid[edgeIndex] = true;
+    }
 
     for (u32 vertexIndex = 0; vertexIndex < polygon.NumVertices; vertexIndex++)
     {
         const u32 previousIndex = (vertexIndex + polygon.NumVertices - 1u) % polygon.NumVertices;
-        const u32 nextIndex = (vertexIndex + 1u) % polygon.NumVertices;
-
-        const double previousDx = baseX[vertexIndex] - baseX[previousIndex];
-        const double previousDy = baseY[vertexIndex] - baseY[previousIndex];
-        const double nextDx = baseX[nextIndex] - baseX[vertexIndex];
-        const double nextDy = baseY[nextIndex] - baseY[vertexIndex];
-        const double previousLength = std::sqrt(previousDx * previousDx + previousDy * previousDy);
-        const double nextLength = std::sqrt(nextDx * nextDx + nextDy * nextDy);
-
-        if (previousLength < 0.000001 || nextLength < 0.000001)
+        if (!edgeNormalValid[previousIndex] || !edgeNormalValid[vertexIndex])
         {
             outX[vertexIndex] = static_cast<u32>(std::clamp(
                 static_cast<s32>(std::lround(baseX[vertexIndex] * 16.0)),
@@ -334,11 +345,10 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
             continue;
         }
 
-        // For positive winding, the outward normal is the right-hand normal.
-        const double previousNx = orientation * previousDy / previousLength;
-        const double previousNy = -orientation * previousDx / previousLength;
-        const double nextNx = orientation * nextDy / nextLength;
-        const double nextNy = -orientation * nextDx / nextLength;
+        const double previousNx = edgeNormalX[previousIndex];
+        const double previousNy = edgeNormalY[previousIndex];
+        const double nextNx = edgeNormalX[vertexIndex];
+        const double nextNy = edgeNormalY[vertexIndex];
 
         const double miterX = previousNx + nextNx;
         const double miterY = previousNy + nextNy;
