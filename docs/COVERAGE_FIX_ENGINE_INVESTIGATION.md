@@ -260,3 +260,17 @@ The convex-offset prototype was subsequently hardened on the same investigation 
 - Near-zero-area and non-convex polygons fall back to the prior radial expansion.
 - Edge normals are precomputed once per polygon edge and shared by adjacent vertices. The ordinary corner intersection uses an algebraic miter expression; an extra square root is needed only when enforcing the acute-corner miter cap. This keeps the normal-construction cost near one normalization per vertex rather than recalculating both adjacent edges at every corner.
 - The Vulkan scene builder passes the user expansion value directly as target-screen pixels and clamps it to 0..2.0. At 6x this remains a high-resolution-pixel distance; the code does not multiply the expansion a second time by the 6x scale.
+
+
+### Deterministic geometry review vectors (pre-build)
+
+These are hand-checkable expectations for the new convex offset, not substitutes for compiled tests:
+
+- CCW square `(0,0), (10,0), (10,10), (0,10)` with distance 2 should produce `(-2,-2), (12,-2), (12,12), (-2,12)` before viewport clamping.
+- The same square with reversed winding should produce the same expanded outline in the corresponding reversed vertex order.
+- A triangle should offset each straight side by the requested perpendicular distance; corner miters follow the adjacent-normal intersection, subject to the 4x cap.
+- A concave or near-zero-area polygon should take the radial fallback, not the convex miter path.
+- Duplicate consecutive vertices should not generate a division by zero; the affected vertex remains at its source coordinate.
+- At 6x, exact bottom-boundary Y=18432 is admitted by the guard and expansion output clamps to 18431; Y=18433 remains strict overflow and disables the fix for that polygon.
+
+These expectations have not been run against compiled C++ code.
