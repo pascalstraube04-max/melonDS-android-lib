@@ -45,7 +45,7 @@ void main()
 
     uint polyAttrV = vTriInfo1In.z;
     uint flagsV = vTriInfo0In.x;
-    // Match the DS equal-depth windows: +/-0x200 for Z and +/-0xFF for W.
+    // Use the DS equal-depth tolerance magnitudes as Vulkan's depth-bias allowance.
     float ventanaIgual = (polyAttrV & (1u << 14u)) != 0u
         ? ((flagsV & (1u << 4u)) != 0u ? 255.0 : 512.0)
         : 0.0;
