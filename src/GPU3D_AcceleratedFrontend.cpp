@@ -515,7 +515,8 @@ void BuildAcceleratedScene(
         draw.EdgeIndexCount += 2u;
     };
 
-    const auto packYBounds = [&](const std::vector<u16>& polygonVertexIndices,
+    const auto packYBounds = [&](const std::array<u16, 11>& polygonVertexIndices,
+                                 u32 polygonVertexIndexCount,
                                  bool usePolygonBounds,
                                  const Polygon& polygon) -> std::optional<u32> {
         if (usePolygonBounds)
@@ -529,14 +530,15 @@ void BuildAcceleratedScene(
             return (polygonYTop & 0xFFFFu) | ((polygonYBot & 0xFFFFu) << 16u);
         }
 
-        if (polygonVertexIndices.empty())
+        if (polygonVertexIndexCount == 0u)
             return std::nullopt;
 
         u32 polygonYTop = static_cast<u32>(std::max(config.MaxFixedY / 16, 0));
         u32 polygonYBot = 0u;
         bool hasBounds = false;
-        for (u16 vertexIndex : polygonVertexIndices)
+        for (u32 index = 0; index < polygonVertexIndexCount; index++)
         {
+            const u16 vertexIndex = polygonVertexIndices[index];
             if (vertexIndex >= outScene.Vertices.size())
                 continue;
 
@@ -665,8 +667,12 @@ void BuildAcceleratedScene(
                 expandedY);
         }
 
-        std::vector<u16> polygonVertexIndices{};
-        polygonVertexIndices.reserve(std::max<u32>(polygon->NumVertices + 1u, 3u));
+        std::array<u16, 11> polygonVertexIndices{};
+        u32 polygonVertexIndexCount = 0u;
+        const auto appendPolygonVertexIndex = [&](u16 vertexIndex) {
+            if (polygonVertexIndexCount < polygonVertexIndices.size())
+                polygonVertexIndices[polygonVertexIndexCount++] = vertexIndex;
+        };
 
         const auto resolveFixedCoords = [&](u32 vertexIndex) -> std::pair<s32, s32> {
             const Vertex* vertex = polygon->Vertices[vertexIndex];
@@ -716,7 +722,7 @@ void BuildAcceleratedScene(
                     static_cast<s16>(vertex->TexCoords[0]),
                     static_cast<s16>(vertex->TexCoords[1]),
                     vertexAttrBase);
-                polygonVertexIndices.push_back(sceneVertexIndex);
+                appendPolygonVertexIndex(sceneVertexIndex);
                 outScene.Indices.push_back(sceneVertexIndex);
                 draw.IndexCount++;
             }
@@ -816,7 +822,7 @@ void BuildAcceleratedScene(
                     vertexAttrBase,
                     true,
                     glColorPacked);
-                polygonVertexIndices.push_back(centerVertexIndex);
+                appendPolygonVertexIndex(centerVertexIndex);
             }
         }
 
@@ -839,22 +845,23 @@ void BuildAcceleratedScene(
                 static_cast<s16>(vertex->TexCoords[0]),
                 static_cast<s16>(vertex->TexCoords[1]),
                 vertexAttrBase);
-            polygonVertexIndices.push_back(sceneVertexIndex);
+            appendPolygonVertexIndex(sceneVertexIndex);
         }
 
         draw.VertexCount = static_cast<u32>(outScene.Vertices.size()) - draw.FirstVertex;
         const std::optional<u32> packedYBounds = packYBounds(
             polygonVertexIndices,
+            polygonVertexIndexCount,
             !config.UseHiresCoordinates,
             *polygon);
         if (!packedYBounds.has_value())
             continue;
 
-        if (config.BetterPolygons && polygon->NumVertices > 3u && !polygonVertexIndices.empty())
+        if (config.BetterPolygons && polygon->NumVertices > 3u && polygonVertexIndexCount != 0u)
         {
-            const u16 centerVertexIndex = polygonVertexIndices.front();
+            const u16 centerVertexIndex = polygonVertexIndices[0];
             const u32 firstOuterIndex = 1u;
-            for (u32 outerVertexIndex = firstOuterIndex + 1u; outerVertexIndex < polygonVertexIndices.size(); outerVertexIndex++)
+            for (u32 outerVertexIndex = firstOuterIndex + 1u; outerVertexIndex < polygonVertexIndexCount; outerVertexIndex++)
             {
                 appendTriangle(
                     draw,
@@ -864,12 +871,12 @@ void BuildAcceleratedScene(
                     AcceleratedTriangleBoundaryEdge0,
                     *packedYBounds);
             }
-            if (polygonVertexIndices.size() > 3u)
+            if (polygonVertexIndexCount > 3u)
             {
                 appendTriangle(
                     draw,
                     centerVertexIndex,
-                    polygonVertexIndices.back(),
+                    polygonVertexIndices[polygonVertexIndexCount - 1u],
                     polygonVertexIndices[firstOuterIndex],
                     AcceleratedTriangleBoundaryEdge0,
                     *packedYBounds);
@@ -877,7 +884,7 @@ void BuildAcceleratedScene(
         }
         else
         {
-            for (u32 vertexIndex = 2u; vertexIndex < polygonVertexIndices.size(); vertexIndex++)
+            for (u32 vertexIndex = 2u; vertexIndex < polygonVertexIndexCount; vertexIndex++)
             {
                 u32 boundaryFlags = AcceleratedTriangleBoundaryEdge0;
                 if (vertexIndex + 1u == polygonVertexIndices.size())
