@@ -7176,9 +7176,10 @@ void VulkanRenderer3D::destroyFaithfulRasterProductSlot(FaithfulRasterProductSlo
 
 bool VulkanRenderer3D::ensureTriangleBuffer(RenderContext* context, size_t triangleCount)
 {
-    static_assert(sizeof(TriangleGpu) == 148, "TriangleGpu layout must match std430 shader struct");
+    static_assert(sizeof(TriangleGpu) == 152, "TriangleGpu layout must match std430 shader struct");
     static_assert(offsetof(TriangleGpu, originalX0) == 120u, "TriangleGpu original coordinates offset mismatch");
     static_assert(offsetof(TriangleGpu, originalFlags) == 144u, "TriangleGpu original flags offset mismatch");
+    static_assert(offsetof(TriangleGpu, originalYBottom) == 148u, "TriangleGpu original bottom scanline offset mismatch");
     VkBuffer& triangleBuffer = context != nullptr ? context->TriangleBuffer : TriangleBuffer;
     VkDeviceMemory& triangleMemory = context != nullptr ? context->TriangleMemory : TriangleMemory;
     VkDeviceSize& triangleBufferSize = context != nullptr ? context->TriangleBufferSize : TriangleBufferSize;
@@ -13915,6 +13916,17 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
         const u32 blendMode = (polygonMeta.PolyAttr >> 4u) & 0x3u;
         const float effectiveCoverageDepthBias =
             sceneDraw.CoverageFixState.ApplyUserFix ? coverageDepthBias : 0.0f;
+        s32 originalBottomMinX = std::numeric_limits<s32>::max();
+        s32 originalBottomMaxX = std::numeric_limits<s32>::min();
+        for (u32 bottomVertexIndex = 0u; bottomVertexIndex < polygon->NumVertices; bottomVertexIndex++)
+        {
+            const Vertex* bottomVertex = polygon->Vertices[bottomVertexIndex];
+            if (bottomVertex == nullptr || bottomVertex->FinalPosition[1] != polygon->YBottom)
+                continue;
+            originalBottomMinX = std::min(originalBottomMinX, bottomVertex->FinalPosition[0]);
+            originalBottomMaxX = std::max(originalBottomMaxX, bottomVertex->FinalPosition[0]);
+        }
+        const bool originalBottomHasWidth = originalBottomMaxX > originalBottomMinX;
         const bool polygonTexturedByRegs = textureMapsEnabled && (((polygon->TexParam >> 26u) & 0x7u) != 0u);
 
         if (!Renderer3DDebugShouldDrawPolygon(
@@ -14393,7 +14405,9 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
             triangle.originalFlags =
                 (vertex0.hasOriginalScreenCoords ? 1u : 0u)
                 | (vertex1.hasOriginalScreenCoords ? 2u : 0u)
-                | (vertex2.hasOriginalScreenCoords ? 4u : 0u);
+                | (vertex2.hasOriginalScreenCoords ? 4u : 0u)
+                | (originalBottomHasWidth ? 8u : 0u);
+            triangle.originalYBottom = static_cast<u32>(std::max<s32>(polygon->YBottom, 0));
             if (hasTexture)
                 triangle.variantKey |= kVariantFlagTextured;
             if (blendMode == 2u)
