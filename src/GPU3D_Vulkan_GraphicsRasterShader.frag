@@ -473,7 +473,10 @@ void applyDsBoundaryCoverage()
 
         vec2 a = startIndex == 0u ? original0 : (startIndex == 1u ? original1 : original2);
         vec2 b = endIndex == 0u ? original0 : (endIndex == 1u ? original1 : original2);
-        vec2 opposite = oppositeIndex == 0u ? raster0 : (oppositeIndex == 1u ? raster1 : raster2);
+        vec2 rasterOpposite = oppositeIndex == 0u ? raster0 : (oppositeIndex == 1u ? raster1 : raster2);
+        vec2 originalOpposite = oppositeIndex == 0u ? original0 : (oppositeIndex == 1u ? original1 : original2);
+        vec2 opposite = (fOriginalEdgeFlags & (1u << oppositeIndex)) != 0u
+            ? originalOpposite : rasterOpposite;
         float interiorSide = edgeCross(a, b, opposite);
         float sampleSide = edgeCross(a, b, samplePoint);
         if (abs(interiorSide) < 0.00001)
