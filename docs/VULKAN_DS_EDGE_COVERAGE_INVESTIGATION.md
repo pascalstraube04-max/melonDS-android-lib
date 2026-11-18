@@ -64,3 +64,13 @@ The Vulkan depth allowance constants were corrected to the DS equal-depth tolera
 - Avoid broad depth shifts: the current coverage depth bias affects all emitted vertices of an expanded polygon, not just its boundary.
 - Do not claim the depth change or a future edge fix works until it has been built and tested on the target Adreno device.
 - Do not trigger GitHub Actions, CI, or APK builds until the user explicitly authorizes a build.
+
+## Shader-access validation (2026-11-18)
+
+- The raster vertex shader forwards only flat per-triangle info already packed into vertex attributes; it does not forward a stable triangle index to the fragment shader.
+- The raster fragment shader currently declares the toon SSBO at binding 2, but does not declare or read the triangle SSBO at binding 0.
+- Descriptor binding 0 is currently vertex-stage-visible. Fragment visibility is enabled only for the normalized-texture-descriptor configuration, not as a general guarantee. Any fragment-side triangle metadata path must update this stage visibility deliberately and remain valid for both texture-sampling configurations.
+- GraphicsSceneVertexBuffer allocation is shared by ordinary and retained render contexts and is double-sized for ping-pong rendering when context == nullptr. Its allocation currently uses vertex-buffer usage only and its 64-byte stride is asserted in ensureGraphicsSceneVertexBuffer().
+- TriangleGpu is populated in the per-polygon emission path. GraphicsPolygonDraw is queued separately and records per-draw vertex/edge ranges, but that draw record is not directly present in the fragment shader interface.
+- Therefore, adding an SSBO read in the fragment shader is not a local GLSL-only change: it requires a stable fragment-to-triangle association, descriptor stage/layout updates, matching C++/std430 layout, and regenerated embedded SPIR-V for the project's actual shader variants.
+- The least invasive next experiment is to determine whether the existing per-vertex flat metadata can encode a triangle-local boundary reference without expanding global buffer interfaces. If not, compare a compact per-triangle metadata extension against a dedicated packed edge buffer before implementing either.
