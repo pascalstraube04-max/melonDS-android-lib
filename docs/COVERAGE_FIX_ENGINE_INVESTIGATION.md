@@ -203,3 +203,18 @@ The Vulkan scene builder explicitly sets `UseHiresCoordinates = true`, and `Vert
 So the exact-boundary rejection is not an ambiguity about the UI slider or the depth-bias scale. It follows directly from the configured 6x viewport and the four-fractional-bit coordinate representation. A vertex at Y = 18432 triggers `yFixed > MaxFixedY`, even though it lies exactly on the viewport's lower clipping plane.
 
 The same one-unit gap exists on X and at the top/left/right boundaries. This confirms the arithmetic behind the candidate; it still does not establish how often the user's game scene produces such vertices. Instrument exact-boundary contacts separately from strict overflow before changing behavior.
+
+
+## Follow-up: DS clipping and high-resolution coordinate generation traced
+
+The coordinate source was traced in `src/GPU3D.cpp`:
+
+- `SubmitPolygon()` calls `ClipPolygon<true>()` before the viewport transform.
+- `ClipPolygon()` clips in Z, then Y, then X using the homogeneous clip-space planes (`ClipAgainstPlane<2>`, `<1>`, `<0>`). Thus the polygon is clipped before screen-space coordinates are calculated.
+- After clipping, the viewport transform computes the ordinary integer screen coordinates in `FinalPosition`.
+- The high-resolution path then independently computes `HiresPosition` from the same clipped homogeneous position and viewport registers, multiplying the viewport result by 16 before integer division. This is the source of the documented four fractional bits; it is not a later Vulkan half-pixel offset.
+- `HiresPosition[1]` is stored as `posY & 0xFFF`. The 12-bit mask is part of the legacy coordinate representation and must be considered when testing extreme/out-of-range values; it must not be mistaken for an explicit clamp to the valid 0..192 viewport.
+
+This confirms the ordering relevant to the hypothesis: homogeneous clipping occurs first, and the exact screen-space viewport boundary can then be represented by the high-resolution viewport transform. A vertex on the lower viewport plane can therefore legitimately map to the exact bottom coordinate before the accelerated frontend applies its stricter `targetHeight * 16 - 1` maximum. At 6x that exact coordinate becomes 18432 after scaling, versus the current maximum 18431.
+
+Important qualification: this source trace confirms the arithmetic path and makes exact-boundary contact a valid case to test; it does not yet prove that a particular game scene emits such a vertex after the viewport transform, nor that it is the only cause of the user's remaining cracks. The next step remains bounded per-side diagnostics, followed by a deterministic exact-boundary/strict-overflow test. No renderer behavior was changed in this follow-up.
