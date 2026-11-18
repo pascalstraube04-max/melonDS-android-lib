@@ -174,3 +174,20 @@ Updated investigation direction:
 4. Keep the lower-edge viewport-guard counters as the first on-device correlation test. Do not change Vulkan fill rules, scissor padding, or depth bias speculatively.
 
 No renderer behavior was changed in this follow-up.
+
+
+## Follow-up: exact viewport-edge coordinate mismatch identified
+
+The frontend viewport guard uses inclusive maxima `MaxFixedX = targetWidth * 16 - 1` and `MaxFixedY = targetHeight * 16 - 1`, then rejects coverage for the entire polygon when a projected vertex is greater than either maximum.
+
+A vertex exactly on the mathematical viewport boundary has coordinate `targetHeight * 16` (Y = targetHeight), which is one fixed-point unit greater than `MaxFixedY`. Such a vertex is a normal possible result of clipping a polygon against the viewport boundary: the polygon can legitimately terminate exactly at the lower edge, while rasterization/scissoring clips fragments to the valid rows [0, targetHeight). The current guard nevertheless classifies that exact-boundary vertex as outside and disables the coverage fix for the entire polygon.
+
+This is a concrete lower-edge false-rejection candidate, not merely a general suspicion about clipping. It is especially relevant because the user's most visible cracks occur at the lower edge. It can also occur at the top/left/right edges with the analogous exact-boundary coordinate.
+
+The safe correction is not to increase the maximum indiscriminately or remove the guard. The guard needs a boundary-aware classification that distinguishes:
+- strictly outside coordinates (< 0 or > targetWidth/Height), from
+- coordinates exactly on the mathematical viewport boundary (== targetWidth/Height), which are valid clipping boundaries but cannot be expanded beyond the render target.
+
+A polygon touching the boundary should retain coverage eligibility for its interior edges, while expansion of the boundary-facing edge itself must be clipped or selectively suppressed. The current all-or-nothing polygon rejection loses coverage on every edge and is therefore overly conservative for this case.
+
+Before implementing, add bounded diagnostics that separately count exact-boundary contact and strict overflow on each side. Then validate with a synthetic polygon whose lower edge is exactly Y = targetHeight, plus a polygon with a small strict overflow. The first should remain eligible for safe interior-edge coverage; the second must not produce out-of-target geometry. No renderer behavior was changed in this follow-up.
