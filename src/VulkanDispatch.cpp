@@ -111,6 +111,7 @@ PFN_vkGetPhysicalDeviceFeatures vkGetPhysicalDeviceFeatures = nullptr;
 PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 = nullptr;
 PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = nullptr;
 PFN_vkGetPhysicalDeviceFormatProperties vkGetPhysicalDeviceFormatProperties = nullptr;
+PFN_vkGetPhysicalDeviceImageFormatProperties vkGetPhysicalDeviceImageFormatProperties = nullptr;
 PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties = nullptr;
 PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
 PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
@@ -289,6 +290,7 @@ void loadGlobalSymbols()
     loadGlobal(vkGetPhysicalDeviceFeatures2, "vkGetPhysicalDeviceFeatures2");
     loadGlobal(vkGetPhysicalDeviceFeatures2KHR, "vkGetPhysicalDeviceFeatures2KHR");
     loadGlobal(vkGetPhysicalDeviceFormatProperties, "vkGetPhysicalDeviceFormatProperties");
+    loadGlobal(vkGetPhysicalDeviceImageFormatProperties, "vkGetPhysicalDeviceImageFormatProperties");
     loadGlobal(vkGetPhysicalDeviceMemoryProperties, "vkGetPhysicalDeviceMemoryProperties");
     loadGlobal(vkGetPhysicalDeviceProperties, "vkGetPhysicalDeviceProperties");
     loadGlobal(vkGetPhysicalDeviceQueueFamilyProperties, "vkGetPhysicalDeviceQueueFamilyProperties");
