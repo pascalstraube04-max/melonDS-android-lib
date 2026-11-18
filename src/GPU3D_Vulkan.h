@@ -393,6 +393,7 @@ private:
         float originalX2;
         float originalY2;
         u32 originalFlags;
+        u32 originalYBottom;
     };
 
     struct GraphicsVertexGpu
