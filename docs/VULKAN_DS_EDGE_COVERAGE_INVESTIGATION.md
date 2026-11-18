@@ -74,3 +74,14 @@ The Vulkan depth allowance constants were corrected to the DS equal-depth tolera
 - TriangleGpu is populated in the per-polygon emission path. GraphicsPolygonDraw is queued separately and records per-draw vertex/edge ranges, but that draw record is not directly present in the fragment shader interface.
 - Therefore, adding an SSBO read in the fragment shader is not a local GLSL-only change: it requires a stable fragment-to-triangle association, descriptor stage/layout updates, matching C++/std430 layout, and regenerated embedded SPIR-V for the project's actual shader variants.
 - The least invasive next experiment is to determine whether the existing per-vertex flat metadata can encode a triangle-local boundary reference without expanding global buffer interfaces. If not, compare a compact per-triangle metadata extension against a dedicated packed edge buffer before implementing either.
+
+## Revised low-overhead shader path (2026-11-18)
+
+A fragment-stage SSBO lookup is not the preferred first implementation. The existing raster vertex shader already reads the per-triangle SSBO at binding 0, and `TriangleGpu` already carries the three raster-space vertex positions plus the three boundary-edge bits in `flags`. This gives a potentially smaller route:
+
+1. Extend each `TriangleGpu` with the three original, unexpanded screen-space vertex positions (six floats). Keep the existing x/y triplets as the expanded raster positions used by Vulkan coverage.
+2. In the vertex shader, use the existing triangle index / SSBO lookup path to fetch the original perimeter coordinates and forward them as flat varyings. Verify the exact triangle-index calculation against every draw mode before relying on it.
+3. In the fragment shader, use `gl_FragCoord` and the flat original perimeter coordinates to evaluate only edges marked by `kTriangleFlagBoundaryEdge0/1/2`; apply DS edge-inclusion rules only to original polygon boundaries, leaving internal fan diagonals to Vulkan's normal top-left rule.
+4. Keep the correction gated by the existing coverage-fix flag so default rendering remains unchanged. Avoid any new fragment SSBO descriptor or per-fragment buffer lookup if the vertex-stage forwarding works.
+
+This path still needs careful handling of clipping, perspective interpolation, viewport scaling, and the DS scanline edge cases documented above. It is an implementation hypothesis, not yet a verified fix. Before editing shader interfaces, validate `gl_VertexIndex`, `pc.triangleBase`, triangle-buffer indexing, and all shader variants in the actual pipeline.
