@@ -501,11 +501,11 @@ void BuildAcceleratedScene(
         draw.TriangleCount++;
     };
 
-    const auto appendEdges = [&](AcceleratedSceneDraw& draw, u32 edgeVertexCount) {
+    const auto appendEdges = [&](AcceleratedSceneDraw& draw, u32 firstVertexOffset, u32 edgeVertexCount) {
         if (edgeVertexCount < 2u)
             return;
 
-        const u16 firstVertex = static_cast<u16>(draw.FirstVertex);
+        const u16 firstVertex = static_cast<u16>(draw.FirstVertex + firstVertexOffset);
         for (u32 vertexOffset = 1; vertexOffset < edgeVertexCount; vertexOffset++)
         {
             outScene.EdgeIndices.push_back(static_cast<u16>(firstVertex + vertexOffset - 1u));
@@ -730,11 +730,12 @@ void BuildAcceleratedScene(
             }
 
             draw.VertexCount = static_cast<u32>(outScene.Vertices.size()) - draw.FirstVertex;
-            appendEdges(draw, draw.VertexCount);
+            appendEdges(draw, 0u, draw.VertexCount);
             outScene.Draws.push_back(draw);
             continue;
         }
 
+        u32 edgeFirstVertexOffset = 0u;
         if (config.BetterPolygons && polygon->NumVertices > 3u)
         {
             s64 centerXFixedSum = 0;
@@ -825,6 +826,7 @@ void BuildAcceleratedScene(
                     true,
                     glColorPacked);
                 appendPolygonVertexIndex(centerVertexIndex);
+                edgeFirstVertexOffset = 1u;
             }
         }
 
@@ -903,7 +905,7 @@ void BuildAcceleratedScene(
             }
         }
 
-        appendEdges(draw, draw.VertexCount);
+        appendEdges(draw, edgeFirstVertexOffset, draw.VertexCount - edgeFirstVertexOffset);
         outScene.Draws.push_back(draw);
     }
 }
