@@ -14503,8 +14503,8 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
                 kTriangleFlagBoundaryEdge0 | kTriangleFlagBoundaryEdge2,
                 *packedLineYBounds);
             appendTriangle(
-                makeTriangleVertex(lineVertex0, quadPositionsX[0], quadPositionsY[0], colorOverride),
-                makeTriangleVertex(lineVertex1, quadPositionsX[2], quadPositionsY[2], colorOverride),
+                makeTriangleVertex(lineVertex0, quadPositionsX[0], quadPositionsY[0], colorOverride, false),
+                makeTriangleVertex(lineVertex1, quadPositionsX[2], quadPositionsY[2], colorOverride, false),
                 makeTriangleVertex(lineVertex1, quadPositionsX[3], quadPositionsY[3], colorOverride, false),
                 kTriangleFlagBoundaryEdge0 | kTriangleFlagBoundaryEdge1,
                 *packedLineYBounds);
