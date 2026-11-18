@@ -83,3 +83,14 @@ No device profiling or Android build has been performed yet. The 6x profile is a
 ### Next diagnostic step
 
 Add a low-overhead, opt-in diagnostic that counts polygons rejected by the viewport guard, with separate counters for left/right/top/bottom overflow and a bounded sample of polygon/vertex coordinates. Keep it disabled by default and avoid per-frame log spam. Use this to determine whether the user's lower-screen artifacts correlate with polygons rejected solely because one or more vertices cross a viewport edge. Only then prototype selective edge-aware expansion.
+
+
+### Android repository integration and CI build path
+
+The Android repository `pascalstraube04-max/WatermelonDS` currently pins its `melonDS-android-lib` submodule to commit `65f4b25ef463b7ac4d9c8741f1a35e92af50e504`. This is exactly the current `DevelopSub` base commit in the user's engine fork, so the investigation branch starts from the Android app's currently pinned engine revision and does not introduce an unrelated engine baseline.
+
+The Android repository's `.gitmodules` currently points the submodule URL at `https://github.com/SapphireRhodonite/melonDS-android-lib.git`, with branch metadata `GBARumble_PR`. To build a future engine change from the user's fork, the Android integration branch must update the submodule URL to the user's fork and update the gitlink to the exact engine commit. Merely creating a branch in the engine repository does not make the Android app build that branch.
+
+A GitHub Actions workflow exists at `.github/workflows/main.yaml`. It triggers on pushes to any branch and supports manual dispatch. It checks out recursive submodules, sets up Java 21 and Android SDK, runs `./gradlew :app:regenerateVulkanSpirv :app:assembleGitHubNightlyRelease`, then uploads the APK and attempts to update the nightly release. The workflow references signing secrets (`MELONDS_KEYSTORE`, `MELONDS_KEYSTORE_PASSWORD`), so availability of those secrets in the user's fork must be confirmed before assuming the release build will complete. The workflow's artifact upload may still be usable if the build step is adjusted to avoid unavailable signing secrets, but no workflow change has been made.
+
+This establishes a viable cloud build route for future test APKs, subject to submodule integration and signing configuration. No workflow has been run for the investigation branch and no APK has been produced.
