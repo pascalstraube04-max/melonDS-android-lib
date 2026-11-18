@@ -47,3 +47,12 @@ A change is not considered complete until it passes build checks and visual test
 ## Important caution
 
 The observed relationship between Coverage Expand / Repeat / Clamp and the user's artifacts is strong evidence that the coverage path matters. It does not by itself prove which internal branch is responsible. Avoid broad changes to clipping or depth until the path is traced and test coverage exists.
+
+
+## Follow-up: clipping semantics need care
+
+The frontend's viewport-boundary guard checks projected high-resolution screen coordinates. The underlying `Vertex::Clipped` flag is set by the 3D clipping pipeline (`ClipSegment`) when a vertex is generated at a clip-plane intersection; it is not a direct replacement for the frontend's viewport-boundary test. Do not replace the viewport test with a simple `Clipped` check.
+
+The GPU pipeline also wraps the DS final screen coordinates (`FinalPosition`) to hardware-sized fields, while the accelerated frontend uses signed high-resolution coordinates. This distinction needs to be preserved when tracing edge behavior.
+
+The current radial expansion clamps each expanded vertex individually to the viewport. That can change polygon shape at the boundary. A safer prototype should clip the polygon in screen space first, then offset the resulting boundary, or selectively expand only edges whose offset remains inside the viewport. This requires handling winding, concavity, zero-length edges, and perspective-correct interpolation of all attributes; a naive per-vertex replacement is not safe.
