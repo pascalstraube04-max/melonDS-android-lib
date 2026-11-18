@@ -14261,7 +14261,8 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
         const auto makeTriangleVertex = [&](const AcceleratedSceneVertex& vertex,
                                             float x,
                                             float y,
-                                            std::optional<u32> colorOverride = std::nullopt) -> TriangleVertexData {
+                                            std::optional<u32> colorOverride = std::nullopt,
+                                            bool preserveOriginalCoords = true) -> TriangleVertexData {
             TriangleVertexData triangleVertex{};
             triangleVertex.x = x;
             triangleVertex.y = y;
@@ -14275,12 +14276,11 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
             triangleVertex.colorRgba8 = colorOverride.value_or(makeColor(vertex));
             triangleVertex.originalX = static_cast<float>(vertex.OriginalXFixed) * (1.0f / 16.0f);
             triangleVertex.originalY = static_cast<float>(vertex.OriginalYFixed) * (1.0f / 16.0f);
-            // Line quads reuse source vertices but pass expanded quad positions.
-            // Only tag a vertex when the raster position is still its original
-            // unexpanded polygon perimeter position.
+            // Line quads reuse source vertices but their expanded corners are
+            // not polygon perimeter vertices. Their callers explicitly disable
+            // original-edge metadata.
             triangleVertex.hasOriginalScreenCoords = vertex.HasOriginalScreenCoords
-                && std::fabs(x - vertex.X) < 0.001f
-                && std::fabs(y - vertex.Y) < 0.001f;
+                && preserveOriginalCoords;
             return triangleVertex;
         };
 
@@ -14497,15 +14497,15 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
                 return;
 
             appendTriangle(
-                makeTriangleVertex(lineVertex0, quadPositionsX[0], quadPositionsY[0], colorOverride),
-                makeTriangleVertex(lineVertex0, quadPositionsX[1], quadPositionsY[1], colorOverride),
-                makeTriangleVertex(lineVertex1, quadPositionsX[2], quadPositionsY[2], colorOverride),
+                makeTriangleVertex(lineVertex0, quadPositionsX[0], quadPositionsY[0], colorOverride, false),
+                makeTriangleVertex(lineVertex0, quadPositionsX[1], quadPositionsY[1], colorOverride, false),
+                makeTriangleVertex(lineVertex1, quadPositionsX[2], quadPositionsY[2], colorOverride, false),
                 kTriangleFlagBoundaryEdge0 | kTriangleFlagBoundaryEdge2,
                 *packedLineYBounds);
             appendTriangle(
                 makeTriangleVertex(lineVertex0, quadPositionsX[0], quadPositionsY[0], colorOverride),
                 makeTriangleVertex(lineVertex1, quadPositionsX[2], quadPositionsY[2], colorOverride),
-                makeTriangleVertex(lineVertex1, quadPositionsX[3], quadPositionsY[3], colorOverride),
+                makeTriangleVertex(lineVertex1, quadPositionsX[3], quadPositionsY[3], colorOverride, false),
                 kTriangleFlagBoundaryEdge0 | kTriangleFlagBoundaryEdge1,
                 *packedLineYBounds);
         };
