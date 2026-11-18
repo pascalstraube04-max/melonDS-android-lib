@@ -486,7 +486,17 @@ void BuildAcceleratedScene(
                 const s32 yFixed = config.UseHiresCoordinates
                     ? vertex->HiresPosition[1] * safeScale
                     : vertex->FinalPosition[1] << 4;
-                if (xFixed < 0 || yFixed < 0 || xFixed > config.MaxFixedX || yFixed > config.MaxFixedY)
+                // HiresPosition uses 4 fractional bits. The exact right/bottom
+                // viewport plane is therefore one fixed-point unit beyond the
+                // last addressable pixel (MaxFixed* + 1). Do not reject a whole
+                // polygon for touching that mathematical boundary; the coverage
+                // expansion below still clamps generated positions to MaxFixed*.
+                // Strict overflow remains guarded as before.
+                const s64 maxBoundaryX = static_cast<s64>(config.MaxFixedX) + 1;
+                const s64 maxBoundaryY = static_cast<s64>(config.MaxFixedY) + 1;
+                if (xFixed < 0 || yFixed < 0
+                    || static_cast<s64>(xFixed) > maxBoundaryX
+                    || static_cast<s64>(yFixed) > maxBoundaryY)
                 {
                     polygonTouchesClipEdge = true;
                     break;
