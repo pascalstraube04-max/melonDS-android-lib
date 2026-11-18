@@ -146,3 +146,12 @@ The Vulkan emission helper `makeTriangleVertex` applies the configured coverage 
 The graphics emission path also recomputes each emitted triangle's Y bounds from that triangle's actual three screen-space vertices. The earlier scene-level packed polygon Y bounds are not used by this emission helper (`packedYBounds` is explicitly unused there). Thus the lower-screen artifact investigation should distinguish (a) the frontend polygon-wide viewport guard, (b) the final per-triangle bounds/raster dispatch, and (c) Vulkan's triangle edge ownership. A lower-edge crack cannot yet be attributed to the polygon Y bounds alone.
 
 No renderer code was changed in this follow-up. The next source-level target is the triangle raster/dispatch implementation that consumes the emitted triangle flags and Y bounds, including its pixel-center and edge-equation rules. In particular, verify whether shared fan edges and final target scanlines are covered consistently before designing any geometry or depth modification.
+
+
+## Follow-up: explicit top-left edge ownership metadata
+
+The Vulkan triangle emission helper computes a signed triangle area and classifies each non-boundary side with an `isTopLeftEdge` test. It sets one of three `kTriangleFlagTopLeftEdge*` bits for qualifying internal sides, while explicitly skipping sides marked as polygon boundary edges.
+
+This is an important distinction: the renderer has a custom top-left ownership convention for internal triangle edges, but polygon perimeter edges are deliberately excluded from that ownership-bit assignment. The flags are packed into each emitted `TriangleGpu`. The actual pixel inclusion test that consumes these flags still needs to be traced before deciding whether this is correct or a source of edge cracks.
+
+The current evidence narrows the next investigation to the consumer of `TriangleGpu::flags` and the raster coverage equations. In particular, verify the sign convention, pixel sample location, epsilon use, and treatment of boundary edges at y = targetHeight - 1. Do not alter the ownership flags until their consumer is understood. No renderer code was changed.
