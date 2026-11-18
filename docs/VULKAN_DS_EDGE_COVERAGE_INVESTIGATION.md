@@ -100,3 +100,17 @@ The proposed vertex-stage SSBO lookup is not necessary for associating raster ve
 Remaining blocker: `appendTriangle()` receives positions from `SharedGraphicsScene.Vertices`, which have already passed through `resolveFixedCoords()` and can be coverage-expanded. The source `Polygon` pointer and its original `Vertices[]` are available during polygon emission, but a correct mapping must account for clipping, generated vertices, triangulation, and which emitted boundary segments still correspond to original DS edges. Do not simply copy the first three source vertices: that is incorrect for polygons with more than three vertices and for clipped polygons.
 
 Implementation direction revised: first trace the frontend's clipping and triangulation provenance so each emitted boundary edge can carry its true unexpanded endpoints. Then add compact per-triangle boundary endpoint attributes to `GraphicsVertexGpu` (or an equivalent CPU-side record), forward them flat, and implement the DS edge test. The vertex-to-triangle draw mapping itself is now confirmed; source-edge provenance remains unverified.
+
+
+## Source polygon provenance trace (2026-11-18)
+
+The accelerated frontend does not triangulate from an opaque clipped mesh: for each non-line render polygon it iterates `polygon->Vertices[0..NumVertices)`, creates one scene perimeter vertex for each non-null source entry, and stores those indices in `polygonVertexIndices`. The optional BetterPolygons center is inserted separately at offset 0; the perimeter remains in source order after it.
+
+Triangulation preserves this perimeter order:
+- BetterPolygons fan triangles are `center, perimeter[i-1], perimeter[i]`; the perimeter side is marked BoundaryEdge0.
+- The ordinary fan uses the same perimeter order; the first and last fan triangles additionally mark the two polygon closing sides as BoundaryEdge2 and BoundaryEdge1.
+- Therefore, for these frontend-generated triangle fans, the boundary-edge bit identifies which pair of triangle corners is a source polygon perimeter segment. Internal fan diagonals are not marked as boundary edges.
+
+The original (unexpanded) screen coordinates can be captured at the same time each scene perimeter vertex is created: `resolveFixedCoords()` currently chooses expandedX/Y for render coordinates when correction is active, but the underlying `Vertex*` is still available and its `HiresPosition[]` is read in the non-expanded branch. The coordinate provenance should be stored explicitly before `resolveFixedCoords()` discards that distinction. The source vertex list is already the polygon presented to this accelerated frontend; this trace found no separate clipping/triangulation stage inside `BuildAcceleratedScene()` between the polygon list and the emitted fan.
+
+This substantially narrows the implementation: preserve a second pair of unexpanded screen coordinates per `AcceleratedSceneVertex`, copy the three source-corner coordinate pairs into each emitted raster triangle's three vertex records, and forward them as flat varyings. The boundary flags already distinguish the polygon perimeter from fan diagonals. Remaining checks before coding are the exact `HiresPosition` scale/viewport convention for all `UseHiresCoordinates` modes, whether any null source vertices can shift the compacted perimeter indices, and the complete vertex-input attribute/stride contract. No shader or runtime behavior has been changed by this investigation.
