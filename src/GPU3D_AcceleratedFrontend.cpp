@@ -411,10 +411,12 @@ void BuildAcceleratedScene(
     outScene.FirstTranslucentDraw = std::numeric_limits<u32>::max();
 
     const u32 renderPolygonCount = gpu3d.RenderNumPolygons;
-    outScene.Vertices.reserve(static_cast<size_t>(renderPolygonCount) * 9u);
+    // A polygon can contribute ten source vertices plus the optional BetterPolygons center.
+    outScene.Vertices.reserve(static_cast<size_t>(renderPolygonCount) * 11u);
     outScene.Indices.reserve(static_cast<size_t>(renderPolygonCount) * 30u);
     outScene.EdgeIndices.reserve(static_cast<size_t>(renderPolygonCount) * 20u);
-    outScene.Triangles.reserve(static_cast<size_t>(renderPolygonCount) * 8u);
+    // A ten-vertex polygon triangulated around its center produces ten triangles.
+    outScene.Triangles.reserve(static_cast<size_t>(renderPolygonCount) * 10u);
     outScene.Draws.reserve(static_cast<size_t>(renderPolygonCount));
 
     const int safeScale = std::max(config.Scale, 1);
