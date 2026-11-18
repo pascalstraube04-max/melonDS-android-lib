@@ -324,7 +324,12 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         const double dy = baseY[nextIndex] - baseY[edgeIndex];
         const double edgeLength = std::sqrt(dx * dx + dy * dy);
         if (edgeLength < 0.000001)
-            continue;
+        {
+            // A zero-length edge makes the adjacent-line intersection
+            // ambiguous. Use one consistent fallback for the whole polygon.
+            writeRadialFallback();
+            return;
+        }
 
         edgeNormalX[edgeIndex] = orientation * dy / edgeLength;
         edgeNormalY[edgeIndex] = -orientation * dx / edgeLength;
@@ -336,13 +341,8 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         const u32 previousIndex = (vertexIndex + polygon.NumVertices - 1u) % polygon.NumVertices;
         if (!edgeNormalValid[previousIndex] || !edgeNormalValid[vertexIndex])
         {
-            outX[vertexIndex] = static_cast<u32>(std::clamp(
-                static_cast<s32>(std::lround(baseX[vertexIndex] * 16.0)),
-                0, std::max(maxFixedX, 0)));
-            outY[vertexIndex] = static_cast<u32>(std::clamp(
-                static_cast<s32>(std::lround(baseY[vertexIndex] * 16.0)),
-                0, std::max(maxFixedY, 0)));
-            continue;
+            writeRadialFallback();
+            return;
         }
 
         const double previousNx = edgeNormalX[previousIndex];
@@ -356,6 +356,12 @@ void ComputeAcceleratedCoverageExpandedVerticesFixed(
         double offsetX = nextNx * coverageFixPx;
         double offsetY = nextNy * coverageFixPx;
 
+        if (denominator <= 0.0001)
+        {
+            // Nearly opposite adjacent normals have no stable finite miter.
+            writeRadialFallback();
+            return;
+        }
         if (denominator > 0.125)
         {
             // Algebraically equivalent to the normalized miter intersection,
