@@ -191,3 +191,15 @@ The safe correction is not to increase the maximum indiscriminately or remove th
 A polygon touching the boundary should retain coverage eligibility for its interior edges, while expansion of the boundary-facing edge itself must be clipped or selectively suppressed. The current all-or-nothing polygon rejection loses coverage on every edge and is therefore overly conservative for this case.
 
 Before implementing, add bounded diagnostics that separately count exact-boundary contact and strict overflow on each side. Then validate with a synthetic polygon whose lower edge is exactly Y = targetHeight, plus a polygon with a small strict overflow. The first should remain eligible for safe interior-edge coverage; the second must not produce out-of-target geometry. No renderer behavior was changed in this follow-up.
+
+
+### Exact 6x coordinate values on the user's target
+
+The Vulkan scene builder explicitly sets `UseHiresCoordinates = true`, and `Vertex::HiresPosition` is documented in `GPU3D.h` as having four fractional bits. At 6x, a lower viewport boundary at 192 * 6 = 1152 high-resolution pixels is therefore represented in the frontend's fixed-point units as:
+
+- exact mathematical bottom boundary: `1152 * 16 = 18432`
+- current accepted maximum: `192 * 6 * 16 - 1 = 18431`
+
+So the exact-boundary rejection is not an ambiguity about the UI slider or the depth-bias scale. It follows directly from the configured 6x viewport and the four-fractional-bit coordinate representation. A vertex at Y = 18432 triggers `yFixed > MaxFixedY`, even though it lies exactly on the viewport's lower clipping plane.
+
+The same one-unit gap exists on X and at the top/left/right boundaries. This confirms the arithmetic behind the candidate; it still does not establish how often the user's game scene produces such vertices. Instrument exact-boundary contacts separately from strict overflow before changing behavior.
