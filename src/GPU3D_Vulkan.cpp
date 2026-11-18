@@ -14275,7 +14275,12 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
             triangleVertex.colorRgba8 = colorOverride.value_or(makeColor(vertex));
             triangleVertex.originalX = static_cast<float>(vertex.OriginalXFixed) * (1.0f / 16.0f);
             triangleVertex.originalY = static_cast<float>(vertex.OriginalYFixed) * (1.0f / 16.0f);
-            triangleVertex.hasOriginalScreenCoords = vertex.HasOriginalScreenCoords;
+            // Line quads reuse source vertices but pass expanded quad positions.
+            // Only tag a vertex when the raster position is still its original
+            // unexpanded polygon perimeter position.
+            triangleVertex.hasOriginalScreenCoords = vertex.HasOriginalScreenCoords
+                && std::fabs(x - vertex.X) < 0.001f
+                && std::fabs(y - vertex.Y) < 0.001f;
             return triangleVertex;
         };
 
