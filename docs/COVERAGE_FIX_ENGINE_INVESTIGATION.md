@@ -340,3 +340,11 @@ Engineering implications:
 4. The shader path has both linear and perspective depth interpolation variants. Their selection and the W-buffer/Z-buffer combinations must be covered by regression tests, especially at overlapping coplanar edges and with the user's snow/shadow flicker scenes.
 
 No Vulkan source change is justified by this audit alone. The findings are static-only: no shader compilation, C++ build, automated test, APK, or device validation was performed.
+
+### Corrective source change: complete depth-image usage validation
+
+Commit `762577831d92ac01ba4f8ab7ff5e9853cf7f2e0e` updates `selectGraphicsDepthStencilFormat()` to retain the existing D24, D32, D16 preference order but reject a candidate unless the physical device accepts the exact image configuration used by the renderer: 2D image, optimal tiling, and the combined depth/stencil-attachment, sampled-image, and transfer-source usage flags. The previous check established only depth/stencil attachment support and did not validate the combined image usage.
+
+This is a narrowly scoped capability-validation correction. It adds no render pass, GPU pass, allocation, per-frame work, or synchronization and therefore has no expected frame-time cost. It may select a later supported depth format on a device where the first candidate cannot satisfy the full usage combination.
+
+Validation status: source change committed; not compiled, not run on Android, and not tested with the S24 Ultra / Mr Purple T30. Runtime format selection and image creation still require device validation. No APK or CI build was started.
